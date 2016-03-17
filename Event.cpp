@@ -20,7 +20,7 @@ void Event::PushHitToLayer(int id, float x, float y, float z,
 	fLayers[id].push_back( {x, y, z, ex, ey, ez, alpha} );	
 };
 
-void Event::Dump( int lines = 5) { 
+void Event::Dump(const int lines) { 
 	std::cout<<"Dumping event n° "<<fId<<":"<<std::endl;
 	std::cout<<"\tVertex cordinates:"<<std::endl;
 	std::cout<<"\t\tx = "<<fMcvtx[0]<<" y = "<<fMcvtx[1]<<" z = "<<fMcvtx[2]<<std::endl;

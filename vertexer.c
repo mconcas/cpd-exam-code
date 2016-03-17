@@ -9,7 +9,7 @@
 
 int main(int argc, char** argv) {
   if( argv[1] == NULL ) {
-    std::cerr<<"Please, provide a data file."<<std::endl;
+    std::cerr<<"Please provide a valid data file."<<std::endl;
     return 1;
   }
 
@@ -39,7 +39,7 @@ int main(int argc, char** argv) {
     	}
   std::cout<<"Events vector filled."<<std::endl;
 
-  for( int i=0; i<(int)events.size(); i++) {
+  for(int i=0; i<(int)events.size(); i++) {
     events[i].Dump();
     std::cout<<std::endl;
   }  
