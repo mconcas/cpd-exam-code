@@ -25,13 +25,13 @@ class Event {
  		void SetVertex(float x, float y, float z);
  		void PrintVertex();
  		void PushHitToLayer(int id, float x, float y ,float z,
- 			float ex, float ey, float ez, float alpha);                  // TODO: find what does alpha represent.
+ 			float ex, float ey, float ez, float alpha);            // TODO: find what does alpha represent.
     void Dump(int=5);                                              // Dump event.
 
 	private:
-		int fId;                                 // Id number
-		array<float,3>          fMcvtx;          // Monte Carlo truth.
-		vector<array<float, 7>> fLayers[7];      // Array of layers
+		int fId;                                                   // Id number
+		array<float,3>          fMcvtx;                            // Monte Carlo truth.
+		vector<array<float, 7>> fLayers[7];                        // Array of layers
 
 };
 

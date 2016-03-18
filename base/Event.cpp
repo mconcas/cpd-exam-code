@@ -9,20 +9,24 @@ using std::endl;
 Event::Event(int Id):
   fId(Id) { };
 
-Event::~Event() {
+Event::~Event() 
+{
   /* yee */
 };
 
-void Event::SetVertex(float x, float y, float z) {
+void Event::SetVertex(float x, float y, float z) 
+{
   fMcvtx = {x, y, z};
 };
 
 void Event::PushHitToLayer(int id, float x, float y, float z,
-    float ex, float ey, float ez, float alpha) {
+    float ex, float ey, float ez, float alpha) 
+{
   fLayers[id].push_back( {x, y, z, ex, ey, ez, alpha} );
 };
 
-void Event::Dump(int lines) {
+void Event::Dump(int lines) 
+{
 #ifdef DEBUG
   cout<<"Dumping event n° "<<fId<<":"<<endl;
   cout<<"\tVertex cordinates:"<<endl;
@@ -35,6 +39,7 @@ void Event::Dump(int lines) {
       cout<<endl;
     }
   }
+  cout<<endl;
 #endif
   return;
 };

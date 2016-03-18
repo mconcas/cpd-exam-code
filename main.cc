@@ -5,8 +5,6 @@
 #include <vector>
 #include "Event.h"
 
-#define DEBUG 1
-
 int main(int argc, char** argv) {
   if( argv[1] == NULL ) {
     std::cerr<<"Please, provide a data file."<<std::endl;
@@ -31,19 +29,15 @@ int main(int argc, char** argv) {
    				counter++;
   				Event event(counter);
   				events.push_back(event);
-  				events.at(counter).SetVertex(x,y,z);
+  				events[counter].SetVertex(x,y,z);
    			} 
       } else {
-   				events.at(counter).PushHitToLayer(id, x, y, z, ex, ey, ez, alpha);
-    		}
+   			events[counter].PushHitToLayer(id, x, y, z, ex, ey, ez, alpha);
     	}
+    }
   std::cout<<"Events vector filled."<<std::endl;
 
-  for( int i=0; i<(int)events.size(); i++) {
-    events[i].Dump();
-    std::cout<<std::endl;
-  }  
+  for( Event e : events ) e.Dump();
 
 	return 0;
-  
 }
