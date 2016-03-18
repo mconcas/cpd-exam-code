@@ -24,11 +24,8 @@ vertexer$(EXE): $(VER_OBJS)
 Event.$(OBJ):
 	$(CC) $(CFLAGS) -c $(BASEDIR)/Event.cpp
 
+debug: 	CFLAGS += -DDEBUG
+debug:	all
+
 clean:
 	$(RM) $(EXES) *.$(OBJ)
-
-# .SUFFIXES:
-# .SUFFIXES: .cpp .$(OBJ)
-
-# .cpp.$(OBJ):
-# 	$(CC) $(CFLAGS) -c $<

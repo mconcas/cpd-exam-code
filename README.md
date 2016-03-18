@@ -1,2 +1,6 @@
 compile with:  
-``` g++-4.9 -std=c++11 main.c Event.cpp ```
+``` $ make  ```
+
+clean with: 
+
+``` $ make clean ```

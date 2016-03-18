@@ -1,5 +1,4 @@
 #include "Event.h"
-#define DEBUG 0
 
 Event::Event(int Id):
   fId(Id) { };
