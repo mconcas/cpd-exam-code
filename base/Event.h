@@ -5,7 +5,7 @@
 //  - An ID number.
 //  - Montecarlo generated vertex.
 //  - 7 layers (represented by vectors) containig "hits": array of 3D points.
-//    with their errors, and an "alpha paramter".
+//    with their errors, and an "alpha parameter".
 //
 
 #ifndef EVENT_H
@@ -22,16 +22,20 @@ class Event {
 	public:
 		Event(int Id);
 		virtual ~Event();
+		int GetId() const { return fId; }
  		void SetVertex(float x, float y, float z);
  		void PrintVertex();
  		void PushHitToLayer(int id, float x, float y ,float z,
  			float ex, float ey, float ez, float alpha);            // TODO: find what does alpha represent.
-    void Dump(int=5);                                              // Dump event.
+    
+    vector<array<float, 7>> GetLayerHits( const int idx ) const { return fLayers[idx]; }
+    array<float, 7> AvgRadii();
+    void Dump(int=5);                                        // Dump event.
 
 	private:
-		int fId;                                                   // Id number
-		array<float,3>          fMcvtx;                            // Monte Carlo truth.
-		vector<array<float, 7>> fLayers[7];                        // Array of layers
+		int fId;                                                 // Id number
+		array<float,3>          fMcvtx;                          // Monte Carlo truth.
+		vector<array<float, 7>> fLayers[7];                      // Array of layers
 
 };
 

@@ -1,4 +1,7 @@
 #include "Event.h"
+#include <omp.h>
+#include <math.h>
+#include <numeric>
 
 #ifdef DEBUG
 #include <iostream>
@@ -24,6 +27,22 @@ void Event::PushHitToLayer(int id, float x, float y, float z,
 {
   fLayers[id].push_back( {x, y, z, ex, ey, ez, alpha} );
 };
+
+array<float, 7> Event::AvgRadii()
+{
+  array<float, 7> results;
+  vector<float> radii[7];
+#pragma omp parallel for
+  for(int i=0; i<7; ++i) {
+    for(size_t j=0; j<fLayers[i].size(); ++j) {
+      float radius = sqrt( fLayers[i][j][0] * fLayers[i][j][0] + 
+                     fLayers[i][j][1] * fLayers[i][j][1]);
+      radii[i].push_back(radius);
+    }
+    results[i]=std::accumulate(radii[i].begin(), radii[i].end(), 0.0) / radii[i].size(); 
+  }
+  return results;
+}
 
 void Event::Dump(int lines) 
 {
