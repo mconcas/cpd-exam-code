@@ -1,8 +1,24 @@
-compile with:  
-``` $ make  ```
+### Compilation using makefile
+compile with:
 
-compile with debug flag:  
-``` $ make debug ```
+    $ make
 
-clean with:  
-``` $ make clean ```
+compile with debug flag
+
+    $ make debug
+
+clean with:
+
+    $ make clean
+
+### Using CMake
+
+Create the build directory and enter there:
+
+    $ mkdir build && cd build
+
+then run cmake
+
+    $ cmake ..
+
+now you should be able to compile using `make`.
