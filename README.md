@@ -22,3 +22,7 @@ then run cmake
     $ cmake ..
 
 now you should be able to compile using `make`.
+
+To enable the debug mode in CMake:
+
+    $ cmake -DCMAKE_BUILD_TYPE=Debug ..
