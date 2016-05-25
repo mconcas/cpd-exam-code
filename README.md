@@ -1,4 +1,4 @@
-### Compilation using makefile
+## Compilation using makefile
 compile with:
 
     $ make
@@ -11,18 +11,24 @@ clean with:
 
     $ make clean
 
-### Using CMake
+## Using CMake
 
 Create the build directory and enter there:
 
     $ mkdir build && cd build
 
-then run cmake
+### configure with ICC
 
-    $ cmake ..
+    $ cmake .. -DCMAKE_CXX_COMPILER=icc -DCMAKE_C_COMPILER=icc
+
+### configure with system default compiler
+  
+    $ cmake .. 
+
+### Enable debug mode in CMake:
+
+    $ cmake -DCMAKE_BUILD_TYPE=Debug ..
 
 now you should be able to compile using `make`.
 
-To enable the debug mode in CMake:
 
-    $ cmake -DCMAKE_BUILD_TYPE=Debug ..
