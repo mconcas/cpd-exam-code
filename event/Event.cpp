@@ -2,49 +2,38 @@
 #include <omp.h>
 #include <math.h>
 #include <numeric>
-
-#ifdef DEBUG
+#include <vector>
 #include <iostream>
 using std::cout;
 using std::endl;
-#endif
 
 Event::Event(int Id):
-  fId(Id) { };
+  fId{Id},
+  fMcvtx{},
+  fRadii{},
+  fLayers{}
+{}
 
-Event::~Event() 
+void Event::SetVertex(float x, float y, float z)
 {
-  /* yee */
-};
-
-void Event::SetVertex(float x, float y, float z) 
-{
-  fMcvtx = {x, y, z};
+  fMcvtx[0] = x;
+  fMcvtx[1] = y;
+  fMcvtx[2] = z;
 };
 
 void Event::PushHitToLayer(int id, float x, float y, float z,
-    float ex, float ey, float ez, float alpha) 
+    float ex, float ey, float ez, float alpha)
 {
-  fLayers[id].push_back( {x, y, z, ex, ey, ez, alpha} );
+  fLayers[id].x.push_back(x);
+  fLayers[id].y.push_back(y);
+  fLayers[id].z.push_back(z);
+  fLayers[id].ex.push_back(ex);
+  fLayers[id].ey.push_back(ey);
+  fLayers[id].ez.push_back(ez);
+  fLayers[id].alpha.push_back(alpha);
 };
 
-array<float, 7> Event::AvgRadii()
-{
-  array<float, 7> results;
-  vector<float> radii[7];
-#pragma omp parallel for
-  for(int i=0; i<7; ++i) {
-    for(size_t j=0; j<fLayers[i].size(); ++j) {
-      float radius = sqrt( fLayers[i][j][0] * fLayers[i][j][0] + 
-                     fLayers[i][j][1] * fLayers[i][j][1]);
-      radii[i].push_back(radius);
-    }
-    results[i]=std::accumulate(radii[i].begin(), radii[i].end(), 0.0) / radii[i].size(); 
-  }
-  return results;
-}
-
-void Event::Dump(int lines) 
+void Event::Dump(int lines)
 {
 #ifdef DEBUG
   cout<<"Dumping event n° "<<fId<<":"<<endl;
