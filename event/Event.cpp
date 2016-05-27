@@ -35,7 +35,7 @@ void Event::PushHitToLayer(int id, float x, float y, float z,
 
 void Event::Dump(int lines)
 {
-#ifdef DEBUG
+/*#ifdef DEBUG
   cout<<"Dumping event n° "<<fId<<":"<<endl;
   cout<<"\tVertex cordinates:"<<endl;
   cout<<"\t\tx = "<<fMcvtx[0]<<" y = "<<fMcvtx[1]<<" z = "<<fMcvtx[2]<<endl;
@@ -48,14 +48,14 @@ void Event::Dump(int lines)
     }
   }
   cout<<endl;
-#endif
+#endif*/
   return;
 };
 
 void Event::PrintVertex() {
-#ifdef DEBUG
+/*#ifdef DEBUG
   cout<<"-1\t"<<fMcvtx[0]<<"\t"<<fMcvtx[1]<<"\t"<<fMcvtx[2]<<endl;
-#endif
+#endif*/
   return;
 };
 
