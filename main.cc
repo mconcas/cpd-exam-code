@@ -23,19 +23,30 @@ int main(int argc, char** argv) {
   vector<Event> events( load_data(argv[1]) );
   Event &e = events[0];
   for ( Event& e : events ) {
-    float* x[7] = {nullptr}, *y[7] = {nullptr}, *z[7] = {nullptr};
+    cluster* layer_clusters[7] = {nullptr};
+    vector<float> phiv[7];
+    float* phi[7] = {nullptr};
     float radius[7] = {0.f};
     int   size[7] = {0};
+    
     for (int iL = 0; iL < 7; ++iL) {
-      x[iL] = e.GetLayer(iL).x.data();
-      y[iL] = e.GetLayer(iL).y.data();
-      z[iL] = e.GetLayer(iL).z.data();
-      size[iL] = e.GetLayer(iL).x.size();
-#pragma offload_transfer target(mic:0) in(x[iL],y[iL] : length(size[iL]) ALLOC RETAIN) signal(x[iL])
-#pragma offload_transfer target(mic:0) in(z[iL] : length(size[iL]) ALLOC RETAIN) signal(z[iL])
-#pragma offload target(mic:0) nocopy(x[iL],y[iL] : length(size[iL]) REUSE) wait(x[iL])
+      layer_clusters[iL] = e.GetClustersFromLayer(iL).data();
+      layer_clusters[iL][1].fP = 2;
+      size[iL] = e.GetClustersFromLayer(iL).size();
+      phiv[iL].resize(size[iL]);
+      phi[iL] = phiv[iL].data();
+      /* Cluster sort */
+      /* Lookup table fill */
+// #pragma offload_transfer target(mic:0) in(x[iL],y[iL],phi[iL] : length(size[iL]) ALLOC RETAIN) in(pippo : length(10) ALLOC RETAIN) signal(x[iL])
+// #pragma offload_transfer target(mic:0) in(z[iL] : length(size[iL]) ALLOC RETAIN) signal(z[iL])
+// #pragma offload target(mic:0) nocopy(x[iL],y[iL] : length(size[iL]) REUSE RETAIN) wait(x[iL])
+#pragma offload_transfer target(mic:0) in(layer_clusters[iL] : length(size[iL]) ALLOC RETAIN) signal(layer_clusters[iL])
+#pragma offload target(mic:0) nocopy(layer_clusters[iL] : length(size[iL]) REUSE RETAIN) wait(layer_clusters[iL])
       {
-        radius[iL] = MeanRadius(x[iL], y[iL], size[iL]);
+        for (int iC = 0; iC < size[iL]; ++iC) {
+          radius[iL] += sqrt(layer_clusters[iL][iC].fX * layer_clusters[iL][iC].fX + layer_clusters[iL][iC].fY * layer_clusters[iL][iC].fY);
+        }        
+// radius[iL] = MeanRadius(x[iL], y[iL], size[iL]);
       }
     }
   }

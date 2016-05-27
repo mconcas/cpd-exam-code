@@ -12,42 +12,37 @@
 #define EVENT_H
 
 #include <vector>
+#include <array>
+#include <omp.h>
 
+using std::array;
 using std::vector;
 
-struct Layer {
-  vector<float> x;
-  vector<float> y;
-  vector<float> z;
-  vector<float> ex;
-  vector<float> ey;
-  vector<float> ez;
-  vector<float> alpha;
+#pragma offload_attribute(push,target(mic))
+struct cluster {
+  float fX;
+  float fY;
+  float fZ;
+  float fP;
 };
+#pragma offload_attribute(pop)
 
 class Event {
 
-	public:
-		Event(int Id);
-		int GetId() const { return fId; }
-
-    float GetMCVertex(int i) { return fMcvtx[i]; }
-
+  public:
+    Event(int Id);
+    int GetId() const { return fId; }
     void SetVertex(float x, float y, float z);
-    void SetRadii(int iL, float radius) { fRadii[iL] = radius; }
- 		void PrintVertex();
- 		void PushHitToLayer(int id, float x, float y ,float z,
- 			float ex, float ey, float ez, float alpha);
+    void PrintVertex();
+    void PushHitToLayer(int id, float x, float y ,float z, float ex, float ey, float ez, float alpha);
+    vector<cluster>& GetClustersFromLayer(int layer);
+    void Dump(int=5);                    
+    
+  private:
+    int fId;                            
+    array<float, 3>          fMcvtx;     
+    vector<cluster> fLayers[7];          
 
-    Layer& GetLayer(const int idx) { return fLayers[idx]; }
-    float AvgRadii(int i) { return fRadii[7]; }
-    void  Dump(int=5);
-
-	private:
-		int fId;             // Id number
-		float fMcvtx[3];     // Monte Carlo truth.
-    float fRadii[7];     // Mean radii
-		Layer fLayers[7];    // Array of layers
 };
 
 #endif
