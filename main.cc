@@ -3,6 +3,7 @@
 #include <string>
 #include <fstream>
 #include <vector>
+#include <algorithm>
 #include "Event.h"
 #include "MeanRadius.h"
 #include "Definitions.h"
@@ -28,25 +29,25 @@ int main(int argc, char** argv) {
     float* phi[7] = {nullptr};
     float radius[7] = {0.f};
     int   size[7] = {0};
-    
+
+    auto index = [&](const cluster& i, int l) {
+      return (i.fP * kInvDphi) * kNz + ((i.fZ + kZ[l]) * kInvDz[l]);
+    };
+
     for (int iL = 0; iL < 7; ++iL) {
       layer_clusters[iL] = e.GetClustersFromLayer(iL).data();
-      layer_clusters[iL][1].fP = 2;
       size[iL] = e.GetClustersFromLayer(iL).size();
-      phiv[iL].resize(size[iL]);
-      phi[iL] = phiv[iL].data();
       /* Cluster sort */
+      std::sort(e.GetClustersFromLayer(iL).begin(),e.GetClustersFromLayer(iL).end(),[&](const cluster& i, const cluster& j) {
+            return index(i,iL) < index(j,iL);
+          });
       /* Lookup table fill */
-// #pragma offload_transfer target(mic:0) in(x[iL],y[iL],phi[iL] : length(size[iL]) ALLOC RETAIN) in(pippo : length(10) ALLOC RETAIN) signal(x[iL])
-// #pragma offload_transfer target(mic:0) in(z[iL] : length(size[iL]) ALLOC RETAIN) signal(z[iL])
-// #pragma offload target(mic:0) nocopy(x[iL],y[iL] : length(size[iL]) REUSE RETAIN) wait(x[iL])
 #pragma offload_transfer target(mic:0) in(layer_clusters[iL] : length(size[iL]) ALLOC RETAIN) signal(layer_clusters[iL])
 #pragma offload target(mic:0) nocopy(layer_clusters[iL] : length(size[iL]) REUSE RETAIN) wait(layer_clusters[iL])
       {
         for (int iC = 0; iC < size[iL]; ++iC) {
           radius[iL] += sqrt(layer_clusters[iL][iC].fX * layer_clusters[iL][iC].fX + layer_clusters[iL][iC].fY * layer_clusters[iL][iC].fY);
-        }        
-// radius[iL] = MeanRadius(x[iL], y[iL], size[iL]);
+        }
       }
     }
   }

@@ -14,6 +14,7 @@
 #include <vector>
 #include <array>
 #include <omp.h>
+#include "Definitions.h"
 
 using std::array;
 using std::vector;
@@ -27,6 +28,7 @@ struct cluster {
 };
 #pragma offload_attribute(pop)
 
+
 class Event {
 
   public:
@@ -36,12 +38,12 @@ class Event {
     void PrintVertex();
     void PushHitToLayer(int id, float x, float y ,float z, float ex, float ey, float ez, float alpha);
     vector<cluster>& GetClustersFromLayer(int layer);
-    void Dump(int=5);                    
-    
+    void Dump(int=5);
+
   private:
-    int fId;                            
-    array<float, 3>          fMcvtx;     
-    vector<cluster> fLayers[7];          
+    int fId;
+    array<float, 3> fMcvtx;
+    vector<cluster> fLayers[7];
 
 };
 
