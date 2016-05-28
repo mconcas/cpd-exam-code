@@ -1,20 +1,14 @@
 #include <iostream>
-#include <sstream>
-#include <string>
-#include <fstream>
 #include <vector>
 #include <algorithm>
 #include "Event.h"
 #include "MeanRadius.h"
 #include "Definitions.h"
+#include "Utilities.h"
 
 using std::vector;
 using std::cout;
 using std::endl;
-
-void parse_args(int argc, char* argv[]);
-vector<Event> load_data(char* fname);
-
 
 #define SIZE (1024)
 
@@ -33,15 +27,19 @@ int main(int argc, char** argv) {
     auto index = [&](const cluster& i, int l) {
       return (i.fP * kInvDphi) * kNz + ((i.fZ + kZ[l]) * kInvDz[l]);
     };
-
+#pragma omp parallel for
     for (int iL = 0; iL < 7; ++iL) {
       layer_clusters[iL] = e.GetClustersFromLayer(iL).data();
       size[iL] = e.GetClustersFromLayer(iL).size();
+
       /* Cluster sort */
-      std::sort(e.GetClustersFromLayer(iL).begin(),e.GetClustersFromLayer(iL).end(),[&](const cluster& i, const cluster& j) {
+      std::sort(e.GetClustersFromLayer(iL).begin(), e.GetClustersFromLayer(iL).end(), [&](const cluster& i, const cluster& j) {
             return index(i,iL) < index(j,iL);
           });
       /* Lookup table fill */
+    }
+
+    for (int iL = 0; iL < 7; ++iL) {
 #pragma offload_transfer target(mic:0) in(layer_clusters[iL] : length(size[iL]) ALLOC RETAIN) signal(layer_clusters[iL])
 #pragma offload target(mic:0) nocopy(layer_clusters[iL] : length(size[iL]) REUSE RETAIN) wait(layer_clusters[iL])
       {
@@ -53,44 +51,4 @@ int main(int argc, char** argv) {
   }
 
   return 0;
-}
-
-
-void parse_args(int argc, char** argv)
-{
-  if( argv[1] == NULL ) {
-    std::cerr<<"Please, provide a data file."<<std::endl;
-    exit(EXIT_FAILURE);
-  }
-}
-
-vector<Event> load_data(char* fname)
-{
-  vector<Event> evector;
-  std::ifstream instream;
-  std::cout<<"Opening: "<<fname<<std::endl;
-  instream.open(fname);
-  int counter = -1;
-  int id;
-  float x, y, z, ex, ey, ez, alpha;
-  std::string line;
-  std::cout<<"Reading data and filling events vector."<<std::endl;
-  while(std::getline(instream, line)) {
-
-    // read line by line, due to the data heterogeneity.
-    std::istringstream inss(line);
-    if(!(inss >> id >> x >> y >> z >> ex >> ey >> ez >> alpha)) {
-      if(id == -1) {
-        counter++;
-        Event event(counter);
-        evector.push_back(event);
-        evector[counter].SetVertex(x,y,z);
-      }
-    } else {
-      evector[counter].PushHitToLayer(id, x, y, z, ex, ey, ez, alpha);
-    }
-  }
-  std::cout<<"Events vector filled."<<std::endl;
-
-  return evector;
 }
