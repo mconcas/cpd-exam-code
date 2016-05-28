@@ -34,7 +34,6 @@ int main(int argc, char** argv) {
     for (int iL = 0; iL < 7; ++iL) {
       vector<int> &tLUT = LUT[iL];
       tLUT.push_back(0);
-      layer_clusters[iL] = e.GetClustersFromLayer(iL).data();
       size[iL] = e.GetClustersFromLayer(iL).size();
 
       /* Cluster sort */
@@ -48,6 +47,7 @@ int main(int argc, char** argv) {
           tLUT.push_back(iC);
       }
       tLUT.push_back(size[iL]); // Close the Lookup table with the latest index (??)
+      layer_clusters[iL] = e.GetClustersFromLayer(iL).data();
     }
 
     for (int iL = 0; iL < 7; ++iL) {
