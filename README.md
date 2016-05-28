@@ -1,17 +1,4 @@
-## Compilation using makefile
-compile with:
-
-    $ make
-
-compile with debug flag
-
-    $ make debug
-
-clean with:
-
-    $ make clean
-
-## Using CMake
+## Compile using CMake
 
 Create the build directory and enter there:
 
