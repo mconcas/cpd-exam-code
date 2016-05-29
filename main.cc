@@ -16,7 +16,6 @@ int main(int argc, char** argv) {
 
   parse_args(argc, argv);
   vector<Event> events( load_data(argv[1]) );
-  vector<int> LUT[7];
 
   Event &e = events[0];
 
@@ -28,9 +27,11 @@ int main(int argc, char** argv) {
     int   size[7] = {0};
 
     auto index = [&](const cluster& i, int l) {
-      return (i.fP * kInvDphi) * kNz + ((i.fZ + kZ[l]) * kInvDz[l]);
+      return int(i.fP * kInvDphi) * kNz + int((i.fZ + kZ[l]) * kInvDz[l]);
     };
-#pragma omp parallel for
+
+    vector<int> LUT[7];
+//#pragma omp parallel for
     for (int iL = 0; iL < 7; ++iL) {
       vector<int> &tLUT = LUT[iL];
       tLUT.push_back(0);
@@ -43,11 +44,13 @@ int main(int argc, char** argv) {
 
       /* Lookup table fill */
       for (int iC = 0; iC < size[iL]; ++iC) {
-        while (e.GetClustersFromLayer(iL)[iC].fP > kDphi * tLUT.size())
+        int idx = index(e.GetClustersFromLayer(iL)[iC],iL);
+        while (index(e.GetClustersFromLayer(iL)[iC],iL) > tLUT.size())
           tLUT.push_back(iC);
       }
       tLUT.push_back(size[iL]); // Close the Lookup table with the latest index (??)
       layer_clusters[iL] = e.GetClustersFromLayer(iL).data();
+      //cout << tLUT.size() << "\t" << index(e.GetClustersFromLayer(iL)[size[iL]-1],iL)<< endl;
     }
 
     for (int iL = 0; iL < 7; ++iL) {
