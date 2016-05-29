@@ -1,4 +1,5 @@
 #include <iostream>
+#include <iomanip>
 #include <sstream>
 #include <string>
 #include <fstream>
@@ -8,6 +9,7 @@
 using std::vector;
 using std::cout;
 using std::endl;
+using std::setw;
 
 // void parse_args(int argc, char* argv[]);
 // vector<Event> load_data(char* fname);
@@ -49,4 +51,18 @@ vector<Event> load_data(char* fname)
   std::cout<<"Events vector filled."<<std::endl;
 
   return evector;
+}
+
+template<typename T> void print_elm(T t, const int& width)
+{
+    cout<< left << setw(width) << t;
+} 
+
+void DumpLUT(const vector<int>& LUT, const int size_x) {
+  for (int i = 0; i < LUT.size(); ++i)
+  { 
+    if ( i !=0 && i % size_x == 0 ) cout<<endl;
+    cout<< setw(10) << LUT[i];
+  }
+  cout<<endl<<endl<<endl;
 }
