@@ -14,20 +14,10 @@
 #include <vector>
 #include <array>
 #include <omp.h>
-#include "Definitions.h"
+#include "Utilities.h"
 
 using std::array;
 using std::vector;
-
-#pragma offload_attribute(push,target(mic))
-struct cluster {
-  float fX;
-  float fY;
-  float fZ;
-  float fP;
-};
-#pragma offload_attribute(pop)
-
 
 class Event {
 
@@ -46,5 +36,7 @@ class Event {
     vector<cluster> fLayers[7];
 
 };
+
+vector<Event> load_data(char* fname);
 
 #endif

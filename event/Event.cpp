@@ -3,6 +3,10 @@
 #include <math.h>
 #include <numeric>
 
+#include <sstream>
+#include <string>
+#include <fstream>
+
 #ifdef DEBUG
 #include <iostream>
 using std::cout;
@@ -57,3 +61,34 @@ void Event::PrintVertex() {
  #endif*/
   return;
 };
+
+vector<Event> load_data(char* fname)
+{
+  vector<Event> evector;
+  std::ifstream instream;
+  std::cout<<"Opening: "<<fname<<std::endl;
+  instream.open(fname);
+  int counter = -1;
+  int id;
+  float x, y, z, ex, ey, ez, alpha;
+  std::string line;
+  std::cout<<"Reading data and filling events vector."<<std::endl;
+  while(std::getline(instream, line)) {
+
+    // read line by line, due to the data heterogeneity.
+    std::istringstream inss(line);
+    if(!(inss >> id >> x >> y >> z >> ex >> ey >> ez >> alpha)) {
+      if(id == -1) {
+        counter++;
+        Event event(counter);
+        evector.push_back(event);
+        evector[counter].SetVertex(x,y,z);
+      }
+    } else {
+      evector[counter].PushHitToLayer(id, x, y, z, ex, ey, ez, alpha);
+    }
+  }
+  std::cout<<"Events vector filled."<<std::endl;
+
+  return evector;
+}

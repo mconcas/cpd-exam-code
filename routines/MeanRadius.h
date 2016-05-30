@@ -2,7 +2,7 @@
 #ifdef _OPENMP
 #include <omp.h>
 #endif
-#include "Definitions.h"
+#include "Utilities.h"
 
 __KERNEL__
 float MeanRadius(const float* x, const float* y, /*const float* phi,*/ const int size) {

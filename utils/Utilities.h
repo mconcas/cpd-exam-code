@@ -1,68 +1,56 @@
-#include <iostream>
-#include <iomanip>
-#include <sstream>
-#include <string>
-#include <fstream>
+#ifndef _DEFINITIONS_
+#define _DEFINITIONS_
+
+# ifdef __INTEL_COMPILER
+#  define __KERNEL__ __declspec(target (mic))
+#  define ALLOC alloc_if(1)
+#  define FREE free_if(1)
+#  define RETAIN free_if(0)
+#  define REUSE alloc_if(0)
+# else
+#  define __KERNEL__
+# endif
+
 #include <vector>
-#include "Event.h"
-
 using std::vector;
-using std::cout;
-using std::endl;
-using std::setw;
 
-// void parse_args(int argc, char* argv[]);
-// vector<Event> load_data(char* fname);
+constexpr float kPi = 3.14159265359f;
+constexpr float kTwoPi = 2.f * 3.14159265359f;
 
-void parse_args(int argc, char** argv)
-{
-  if( argv[1] == NULL ) {
-    std::cerr<<"Please, provide a data file."<<std::endl;
-    exit(EXIT_FAILURE);
-  }
-}
+__KERNEL__ constexpr int kNz = 16;
+__KERNEL__ constexpr int kNphi = 256;
 
-vector<Event> load_data(char* fname)
-{
-  vector<Event> evector;
-  std::ifstream instream;
-  std::cout<<"Opening: "<<fname<<std::endl;
-  instream.open(fname);
-  int counter = -1;
-  int id;
-  float x, y, z, ex, ey, ez, alpha;
-  std::string line;
-  std::cout<<"Reading data and filling events vector."<<std::endl;
-  while(std::getline(instream, line)) {
+constexpr float kDphi = kTwoPi / kNphi;
+constexpr float kInvDphi = kNphi / kTwoPi;
 
-    // read line by line, due to the data heterogeneity.
-    std::istringstream inss(line);
-    if(!(inss >> id >> x >> y >> z >> ex >> ey >> ez >> alpha)) {
-      if(id == -1) {
-        counter++;
-        Event event(counter);
-        evector.push_back(event);
-        evector[counter].SetVertex(x,y,z);
-      }
-    } else {
-      evector[counter].PushHitToLayer(id, x, y, z, ex, ey, ez, alpha);
-    }
-  }
-  std::cout<<"Events vector filled."<<std::endl;
+constexpr float kZ[7] = {16.333f,16.333f,16.333f,42.140f,42.140f,73.745f,73.745f};
+constexpr float kInvDz[7] = {
+  0.5 * kNz / 16.333f,0.5 * kNz / 16.333f,0.5 * kNz / 16.333f,0.5 * kNz / 42.140f,
+  0.5 * kNz / 42.140f,0.5 * kNz / 73.745f,0.5 * kNz / 73.745f};
 
-  return evector;
-}
+__KERNEL__ constexpr float kRadii[7] = {2.34,3.15,3.93,19.6,24.55,34.39,39.34};
 
-template<typename T> void print_elm(T t, const int& width)
-{
-    cout<< left << setw(width) << t;
-} 
+#pragma offload_attribute(push,target(mic))
+struct cluster {
+  float fX;
+  float fY;
+  float fZ;
+  float fP;
+};
 
-void DumpLUT(const vector<int>& LUT, const int size_x) {
-  for (int i = 0; i < LUT.size(); ++i)
-  { 
-    if ( i !=0 && i % size_x == 0 ) cout<<endl;
-    cout<< setw(10) << LUT[i];
-  }
-  cout<<endl<<endl<<endl;
-}
+struct tracklet {
+  int i0,i1;
+  float dzdr;
+  int magic;
+};
+#pragma offload_attribute(pop)
+
+__KERNEL__ int get_nclusters(const int* lut, int iPhi);
+__KERNEL__ int n_tracklets(const int* lut0, const int* lut1, int nphi = kNphi);
+
+void parse_args(int argc, char** argv);
+
+//template<typename T> void print_elm(T t, const int& width) { cout<< left << setw(width) << t; }
+//void DumpLUT(const vector<int>& LUT, const int size_x) {
+
+#endif

@@ -1,9 +1,10 @@
 #include <iostream>
 #include <vector>
 #include <algorithm>
+#include <stdlib.h>
 #include "Event.h"
 #include "MeanRadius.h"
-#include "Definitions.h"
+#include "Trackleter.h"
 #include "Utilities.h"
 
 using std::vector;
@@ -19,54 +20,65 @@ int main(int argc, char** argv) {
 
   Event &e = events[0];
 
+  auto index = [&](const cluster& i, int l) {
+    return int(i.fP * kInvDphi) * kNz + int((i.fZ + kZ[l]) * kInvDz[l]);
+  };
   for ( Event& e : events ) {
+    //int   size[7] = {0};
     cluster* layer_clusters[7] = {nullptr};
-    vector<float> phiv[7];
     float* phi[7] = {nullptr};
     float radius[7] = {0.f};
     int   size[7] = {0};
+    vector<float> phiv[7];
 
-    auto index = [&](const cluster& i, int l) {
-      return i.fP * kInvDphi * kNz + (i.fZ + kZ[l]) * kInvDz[l];
-    };
-
-    auto int_index = [&](const cluster& i, int l) {
-      return int(i.fP * kInvDphi) * kNz + int((i.fZ + kZ[l]) * kInvDz[l]);
-    };
-
-    vector<int> LUT[7];
+    vector<int> vLUT[7];
+    int*        LUT[7] = {nullptr};
 //#pragma omp parallel for
     for (int iL = 0; iL < 7; ++iL) {
-      vector<int> &tLUT = LUT[iL];
+
+      vector<int> &tLUT = vLUT[iL];
+      tLUT.reserve(kNz * kNphi + 1);
       tLUT.push_back(0);
-      // tLUT = vector<int>(kNz*kNphi, int_index())
+      LUT[iL] = tLUT.data();
+
       size[iL] = e.GetClustersFromLayer(iL).size();
 
       /* Cluster sort */
       std::sort(e.GetClustersFromLayer(iL).begin(), e.GetClustersFromLayer(iL).end(), [&](const cluster& i, const cluster& j) {
-            return index(i,iL) < index(j,iL); });
+          return index(i,iL) < index(j,iL); });
 
       /* Lookup table fill */
       for (int iC = 0; iC < size[iL]; ++iC) {
-        while (int_index(e.GetClustersFromLayer(iL)[iC],iL) > tLUT.size())
+        while (index(e.GetClustersFromLayer(iL)[iC],iL) > tLUT.size())
           tLUT.push_back(iC);
       }
-      tLUT.push_back(size[iL]);
-      while (tLUT.size() < kNz*kNphi ) tLUT.push_back(tLUT[tLUT.size() - 1]);  // Fix LUT size 
-      DumpLUT(tLUT, kNz);                                                                          
-      // cout<<"Last LUT index: "<<tLUT[tLUT.size()-1]<<"\t"<<"Layer length: "<<size[iL]<<endl;
+      while (tLUT.size() <= kNz*kNphi ) tLUT.push_back(size[iL]);  // Fix LUT size
       /* Prepare data for offloading */
       layer_clusters[iL] = e.GetClustersFromLayer(iL).data();
-      // cout << tLUT.size() << "\t" << int_index(e.GetClustersFromLayer(iL)[size[iL]-1],iL)<< endl;
+
+//#pragma offload_transfer target(mic:0) in(layer_clusters[iL] : length(size[iL]) ALLOC RETAIN) in(LUT[iL] : length(kNz * kNphi) ALLOC RETAIN) signal(layer_clusters[iL])
     }
 
-    for (int iL = 0; iL < 7; ++iL) {
-#pragma offload_transfer target(mic:0) in(layer_clusters[iL] : length(size[iL]) ALLOC RETAIN) signal(layer_clusters[iL])
-#pragma offload target(mic:0) nocopy(layer_clusters[iL] : length(size[iL]) REUSE RETAIN) wait(layer_clusters[iL])
+
+    tracklet* trkl[6];
+    int       n_trkl[6] = {0};
+    for (int iL = 0; iL < 6; ++iL) {
+      int* lut0 = LUT[iL];
+      int* lut1 = LUT[iL+1];
+      cluster* clu0 = layer_clusters[iL];
+      cluster* clu1 = layer_clusters[iL+1];
+      n_trkl[iL] = n_tracklets(LUT[iL],LUT[iL+1]);
+      trkl[iL] = (tracklet*)malloc(n_trkl[iL] * sizeof(tracklet));
+      cout << n_trkl[iL] << "\t" << sizeof(tracklet) << "\t" << n_trkl[iL] * sizeof(tracklet) / (1024 * 1024) << endl;
+#pragma offload target(mic:0) \
+      in(trkl[iL] : length(n_trkl[iL]) ALLOC RETAIN) \
+      in(clu0 : length(size[iL]) ALLOC RETAIN) \
+      in(clu1 : length(size[iL+1]) ALLOC RETAIN) \
+      in(lut0 : length(kNz * kNphi) ALLOC RETAIN) \
+      in(lut1 : length(kNz * kNphi) ALLOC RETAIN)
+      //wait(layer_clusters[iL],layer_clusters[iL+1])*/
       {
-        for (int iC = 0; iC < size[iL]; ++iC) {
-          radius[iL] += sqrt(layer_clusters[iL][iC].fX * layer_clusters[iL][iC].fX + layer_clusters[iL][iC].fY * layer_clusters[iL][iC].fY);
-        }
+        Trackleter(clu0,lut0,clu1,lut1,kRadii[iL+1] - kRadii[iL],trkl[iL]);
       }
     }
   }

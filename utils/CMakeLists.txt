@@ -1,11 +1,10 @@
-set(MODULE event)
+set(MODULE utils)
 
 set(SRCS
-  Event.cpp
-)
+    Utilities.cpp
+   )
 
 string(REPLACE ".cpp" ".h" HDRS "${SRCS}")
 
-include_directories(${CPD-EXAM_SOURCE_DIR}/utils)
-
 add_library(${MODULE} ${SRCS})
+
