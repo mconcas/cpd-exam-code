@@ -7,11 +7,9 @@
 #include <string>
 #include <fstream>
 
-#ifdef DEBUG
 #include <iostream>
 using std::cout;
 using std::endl;
-#endif
 
 Event::Event(int Id):
   fId(Id) { };

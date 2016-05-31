@@ -1,10 +1,11 @@
 set(MODULE utils)
 
 set(SRCS
-    Utilities.cpp
+    err_code.cpp
+    wtime.cpp
    )
 
-string(REPLACE ".cpp" ".h" HDRS "${SRCS}")
+   #string(REPLACE ".cpp" ".h" HDRS "${SRCS}")
 
-add_library(${MODULE} ${SRCS})
+   add_library(${MODULE} STATIC ${SRCS})
 

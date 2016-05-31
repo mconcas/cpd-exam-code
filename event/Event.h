@@ -14,7 +14,7 @@
 #include <vector>
 #include <array>
 #include <omp.h>
-#include "Utilities.h"
+#include "definitions.h"
 
 using std::array;
 using std::vector;
