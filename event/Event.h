@@ -18,6 +18,13 @@
 using std::array;
 using std::vector;
 
+struct Layer {
+  vector<float> x;
+  vector<float> y;
+  vector<float> z;
+  vector<float> phi;
+};
+
 class Event {
 
   public:
@@ -26,13 +33,13 @@ class Event {
     void SetVertex(float x, float y, float z);
     void PrintVertex();
     void PushHitToLayer(int id, float x, float y ,float z, float ex, float ey, float ez, float alpha);
-    vector<cluster>& GetClustersFromLayer(int layer);
+    Layer& GetLayer(int layer) { return fLayers[layer]; }
     void Dump(int=5);
 
   private:
     int fId;
     array<float, 3> fMcvtx;
-    vector<cluster> fLayers[7];
+    array<Layer, 7> fLayers;
 
 };
 
