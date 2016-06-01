@@ -1,5 +1,4 @@
 #include "Event.h"
-#include <omp.h>
 #include <math.h>
 #include <numeric>
 
@@ -22,7 +21,6 @@ void Event::SetVertex(float x, float y, float z) {
 
 void Event::PushHitToLayer(int id, float x, float y, float z,
     float ex, float ey, float ez, float alpha) {
-  array<float, 7> Layer;
   float phi = (float)atan2(-y,-x) + kPi;
   fLayers[id].push_back( {x, y, z, phi} ); // At this point phi is note evaluated yet.
 };

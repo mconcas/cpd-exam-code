@@ -13,7 +13,6 @@
 
 #include <vector>
 #include <array>
-#include <omp.h>
 #include "definitions.h"
 
 using std::array;

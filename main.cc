@@ -5,7 +5,7 @@
 #include <chrono>
 #include "Event.h"
 #include "definitions.h"
-#include "CL/cl.hpp"
+#include "cl.hpp"
 #include "util.hpp"
 
 using std::vector;
@@ -34,8 +34,6 @@ int main(int argc, char** argv) {
   }
 
   vector<Event> events( load_data(argv[1]) );
-
-  Event &e = events[0];
 
   auto index = [&](const cluster& i, int l) {
     return int(i.fP * kInvDphi) * kNz + int((i.fZ + kZ[l]) * kInvDz[l]);
@@ -93,7 +91,7 @@ int main(int argc, char** argv) {
 
       auto t1 = high_resolution_clock::now();
       microseconds total_ms = std::chrono::duration_cast<microseconds>(t1 - t0);
-      printf("\nThe kernels ran in %i microseconds\n", total_ms.count());
+      printf("\nThe kernels ran in %lli microseconds\n", total_ms.count());
     } catch (cl::Error err) {
       std::cout << "Exception\n";
       std::cerr << "ERROR: " << err.what() << "(" << err_code(err.err()) << ")" << std::endl;
