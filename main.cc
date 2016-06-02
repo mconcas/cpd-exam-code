@@ -146,9 +146,9 @@ int main(int argc, char** argv) {
         vector<float> vtdzdr(ntrkls);
         vector<float> vtphi(ntrkls);
 
-        d_tid0[iL] = cl::Buffer(context, begin(vtId0), end(vtId0), true);
-        d_tid1[iL] = cl::Buffer(context, begin(vtId1), end(vtId1), true);
-        d_tdzdr[iL] = cl::Buffer(context, begin(vtdzdr), end(vtdzdr), true);
+        d_tid0[iL] = cl::Buffer(context, CL_MEM_ALLOC_HOST_PTR, sizeof(float) * ntrkls);
+        d_tid1[iL] = cl::Buffer(context, CL_MEM_ALLOC_HOST_PTR, sizeof(float) * ntrkls);
+        d_tdzdr[iL] = cl::Buffer(context, CL_MEM_ALLOC_HOST_PTR, sizeof(float) * ntrkls);
         d_tphi[iL] = cl::Buffer(context, begin(vtphi), end(vtphi), true);
 
         using std::chrono::high_resolution_clock;
