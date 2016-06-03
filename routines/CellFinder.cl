@@ -1,0 +1,89 @@
+#include "definitions.h"
+
+int get_nclusters(__global int* lut, int iPhi) {
+    iPhi &= (kNphi - 1);
+    return lut[(iPhi + 1) * kNz] - lut[iPhi * kNz];
+};
+
+int get_nclusters(__global int* lut, int iPhi, int iZ) {
+    iPhi &= (kNphi - 1);
+    return lut[iPhi * kNz + iZ + 1] - lut[iPhi * kNz + iZ];
+}
+
+int n_tracklets(__global int* lut0, __global int* lut1, int nphi) {
+    int n = 0;
+    for (int i = 0; i < nphi; ++i)
+        n += get_nclusters(lut0,i) * (get_nclusters(lut1,i + 1) + get_nclusters(lut1,i) + get_nclusters(lut1,i - 1));
+    return n;
+}
+
+int first_tracklet(__global int* lut0, __global int* lut1, int nphi0, int nz0) {
+    int n = n_tracklets(lut0,lut1,nphi0);
+
+    int mult = (get_nclusters(lut1,nphi0 + 1) + get_nclusters(lut1,nphi0) + get_nclusters(lut1,nphi0 - 1));
+    for (int iZ0 = 0; iZ0 < nz0; ++iZ0) {
+        n += get_nclusters(lut0,nphi0,iZ0) * mult;
+    }
+    return n;
+}
+
+__kernel void CellFinder(
+        __global int*   id1_0,
+        __global float* phi0,
+        __global float* dzdr0,
+        __global int*   id0_1,
+        __global float* phi1,
+        __global float* dzdrR1,
+        __global int*   lut0,
+        __global int*   lut1,
+        __global int*   lut2,
+        __global int*   neigh0,
+        __global int*   neigh1
+        ) {
+
+    /// Group ID: needed to search the LUT
+    const int group_id = get_group_id(0);
+    const int group_size = get_local_size(0);
+
+    /// Local ID
+    const int local_id = get_local_id(0);
+
+    for (int iteration = group_id * group_size; iteration < kNz * kNphi; iteration += group_size * get_num_groups(0)) {
+        const int current_phi = iteration / kNz;
+        const int current_z = iteration % kNz;
+        const int next_phi = (iteration + 1) / kNz;
+        const int next_z = (iteration + 1) % kNz;
+
+        const int first_tracklet = first_tracklet(lut1,lut2,current_phi,current_z);
+        const int last_tracklet = first_tracklet(lut1,lut2,next_phi,next_z);
+
+        __local float dzdr_1;
+        __local float phi_1;
+        __local int   id_1;
+
+        for (int iT1 = first_tracklet; iT1 < last_tracklet; ++iT1) {
+            dzdr_1 = dzdr1[iT1];
+            phi_1 = phi1[iT1];
+            id_1  = id1[iT1];
+
+            for (int iPhi = current_phi - 1; iPhi <= current_phi + 1; ++iPhi) {
+                const int iPhiN = iPhi & (kNphi - 1);
+
+                int clusters_until_this_bin = 0;
+                for (int iC = current_phi + 1 - iPhi; iC > 0; iC--)
+                    clusters_until_this_bin += get_nclusters(lut1,current_phi - iC);
+                clusters_until_this_bin += lut1[(iPhiN * kNz) + current_z] - lut1[iPhiN * kNz];
+
+                for (int iZ = 0; iZ < kNz; ++iZ) {
+                    const int first_assoc = first_tracklet(lut0,lut1,iPhiN,iZ) + get_nclusters(lut0,iPhiN,iZ) * clusters_until_this_bin;
+                    for (int iT0 = first_assoc; iT0 < first_assoc + get_nclusters(lut0,iPhiN,iZ) * get_nclusters(lut1,current_phi,current_z); ++iT0) {
+                        const bool flag = (id_1 == id0[iT0]) && (abs(dzdr0[iT0]-dzdr_1) < kDzDrTol) && (abs(phi_1 -phi[iT0]) < kDphiTol || (abs(phi_1 -phi[iT0]) - 2 * M_PI_F) < kDphiTol);
+                        neigh0[iT0] = flag ? iT1 : -1;
+                        neigh1[iT1] = flag ? iT0 : -1;
+                    }
+                }
+            }
+        }
+    }
+}
+
