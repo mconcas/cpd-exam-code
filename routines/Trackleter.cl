@@ -1,16 +1,21 @@
 #include "definitions.h"
 
+#ifndef _OPENCL
+inline int get_group_id(int) { return __GID; }
+inline int get_local_id(int) { return __LID; }
+#endif
+
 int get_nclusters(__global int* lut, int iPhi) {
     iPhi &= (kNphi - 1);
     return lut[(iPhi + 1) * kNz] - lut[iPhi * kNz];
 };
-
 int n_tracklets(__global int* lut0, __global int* lut1, int nphi) {
     int n = 0;
     for (int i = 0; i < nphi; ++i)
         n += get_nclusters(lut0,i) * (get_nclusters(lut1,i + 1) + get_nclusters(lut1,i) + get_nclusters(lut1,i - 1));
     return n;
 };
+
 
 __kernel void Trackleter(
         __global float* x0,

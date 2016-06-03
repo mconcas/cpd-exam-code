@@ -23,6 +23,7 @@ struct Layer {
   vector<float> y;
   vector<float> z;
   vector<float> phi;
+  vector<int> mcl;
 };
 
 class Event {
@@ -32,7 +33,8 @@ class Event {
     int GetId() const { return fId; }
     void SetVertex(float x, float y, float z);
     void PrintVertex();
-    void PushHitToLayer(int id, float x, float y ,float z, float ex, float ey, float ez, float alpha);
+    void PushHitToLayer(int id, float x, float y ,float z, float ex, float ey, float ez,
+      float alpha, int mcl0, int mcl1);
     Layer& GetLayer(int layer) { return fLayers[layer]; }
     void Dump(int=5);
 
@@ -44,5 +46,6 @@ class Event {
 };
 
 vector<Event> load_data(char* fname);
-
+int numCluster(int* lut, int iPhi);
+int numTracklets(int* lut0, int* lut1, int nphi);
 #endif

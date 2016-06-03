@@ -10,6 +10,7 @@
 using std::cout;
 using std::endl;
 
+
 Event::Event(int Id):
   fId(Id) { };
 
@@ -20,12 +21,13 @@ void Event::SetVertex(float x, float y, float z) {
 };
 
 void Event::PushHitToLayer(int id, float x, float y, float z,
-    float ex, float ey, float ez, float alpha) {
+    float ex, float ey, float ez, float alpha, int mcl0, int mcl1) {
   float phi = (float)atan2(-y,-x) + kPi;
   fLayers[id].x.push_back(x);
   fLayers[id].y.push_back(y);
   fLayers[id].z.push_back(z);
   fLayers[id].phi.push_back(phi);
+  fLayers[id].mcl.push_back(mcl0);
 };
 
 void Event::PrintVertex() {
@@ -39,23 +41,38 @@ vector<Event> load_data(char* fname)
   std::ifstream instream;
   std::cout<<"Opening: "<<fname<<std::endl;
   instream.open(fname);
-  int id;
+  int counter_MC = 0;
+  int id, MCl0, MCl1;
   float x, y, z, ex, ey, ez, alpha;
   std::string line;
   std::cout<<"Reading data and filling events vector."<<std::endl;
   while(std::getline(instream, line)) {
     std::istringstream inss(line);
-    if(!(inss >> id >> x >> y >> z >> ex >> ey >> ez >> alpha)) {
+    if(!(inss >> id >> x >> y >> z >> ex >> ey >> ez >> alpha >> MCl0 >> MCl1 )) {
+      if (MCl1 > 0) counter_MC ++;
       if(id == -1) {
         Event event(evector.size());
         evector.push_back(event);
         evector.back().SetVertex(x,y,z);
       }
     } else {
-      evector.back().PushHitToLayer(id, x, y, z, ex, ey, ez, alpha);
+      evector.back().PushHitToLayer(id, x, y, z, ex, ey, ez, alpha, MCl0, MCl1);
     }
   }
-  std::cout<<"Events vector filled."<<std::endl;
+  std::cout<<"Events vector filled. MCl1 > 0: "<<counter_MC<<endl;
 
   return evector;
 }
+
+int numCluster(int* lut, int iPhi) {
+    iPhi &= (kNphi - 1);
+    return lut[(iPhi + 1) * kNz] - lut[iPhi * kNz];
+};
+
+int numTracklets(int* lut0, int* lut1, int nphi) {
+    int n = 0;
+    for (int i = 0; i < nphi; ++i)
+        n += numCluster(lut0,i) * (numCluster(lut1,i + 1) + numCluster(lut1,i) + numCluster(lut1,i - 1));
+    return n;
+};
+

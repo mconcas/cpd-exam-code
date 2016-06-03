@@ -1,3 +1,6 @@
+#ifndef _OPENCL
+#define _OPENCL
+#endif
 #ifndef UTILITIES_H
 #define UTILITIES_H
 
@@ -9,32 +12,15 @@
 
 #define kGroupSize 32
 
-// int get_nclusters(const vector<int> lut, int iPhi);
-// int n_tracklets(const vector<int> lut0, const vector<int> lut1, int nphi = kNphi);
+#ifndef _OPENCL
+  #define __kernel
+  #define __global
+  #define __local
+  #define M_PI_F (3.14159265359f)
+  extern int __GID;
+  extern int __LID;
 
-// struct cluster {
-//   float fX;
-//   float fY;
-//   float fZ;
-//   float fP;
-// };
-
-// struct tracklet {
-//   int i0,i1;
-//   float dzdr;
-//   int magic;
-// };
-
-// int get_nclusters(const int* lut, int iPhi) {
-//   iPhi &= (kNphi - 1);
-//   return lut[(iPhi + 1) * kNz] - lut[iPhi * kNz];
-// };
-// 
-// int n_tracklets(const int* lut0, const int* lut1, int nphi = kNphi) {
-//   int n = 0;
-//   for (int i = 0; i < nphi; ++i)
-//     n += get_nclusters(lut0,i) * (get_nclusters(lut1,i + 1) + get_nclusters(lut1,i) + get_nclusters(lut1,i - 1));
-//   return n;
-// };
+  inline int get_local_size(int) { return kGroupSize; }
+#endif
 
 #endif
