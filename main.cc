@@ -9,17 +9,17 @@
 #include "util.hpp"
 
 #ifndef _OPENCL
-  #define VERSION "Serial"
-  #include "Trackleter.cl"
-  int __GID = 0;
-  int __LID = 0;
+#define VERSION "Serial"
+#include "Trackleter.cl"
+int __GID = 0;
+int __LID = 0;
 #else
-  #include "cl.hpp"
-  #define VERSION "OpenCL"
-  #ifndef DEVICE
-  //#define DEVICE CL_DEVICE_TYPE_CPU
-  #define DEVICE CL_DEVICE_TYPE_ACCELERATOR
-  #endif
+#include "cl.hpp"
+#define VERSION "OpenCL"
+#ifndef DEVICE
+#define DEVICE CL_DEVICE_TYPE_CPU
+//#define DEVICE CL_DEVICE_TYPE_ACCELERATOR
+#endif
 #endif
 
 using std::vector;
@@ -92,6 +92,8 @@ int main(int argc, char** argv) {
   /// Create kernel function
   auto Trackleter = cl::make_kernel<cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,
        cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer, float>(program_trackleter, "Trackleter");
+  auto CellFinder = cl::make_kernel<cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,
+       cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer>(program_cellfinder, "CellFinder");
 
   cl::Buffer d_x[7];
   cl::Buffer d_y[7];
@@ -102,143 +104,161 @@ int main(int argc, char** argv) {
   cl::Buffer d_tid1[6];
   cl::Buffer d_tdzdr[6];
   cl::Buffer d_tphi[6];
-  cl::Buffer d_cid1[5];
+  cl::Buffer d_cid0[6];
+  cl::Buffer d_cid1[6];
 #endif
 
   /// Loop over the vector of events
   //for ( Event& e : events ) {
-    Event &e = events[0];
-    std::array<vector<int>, 7> LUT;
-    vector<float> vX[7];
-    vector<float> vY[7];
-    vector<float> vZ[7];
-    vector<float> vPhi[7];
+  Event &e = events[0];
+  std::array<vector<int>, 7> LUT;
+  vector<float> vX[7];
+  vector<float> vY[7];
+  vector<float> vZ[7];
+  vector<float> vPhi[7];
 
-#ifdef _OPENCL
-    try {
-#endif
 
-      int tot_tracklets = 0;
+  int tot_tracklets = 0;
 
-      /// Loop over layers
-      for (int iL = 0; iL < 7; ++iL ) {
-        vector<int>& tLUT = LUT[iL];
-        vector<float>& x = vX[iL];
-        vector<float>& y = vY[iL];
-        vector<float>& z = vZ[iL];
-        vector<float>& phi = vPhi[iL];
+  /// Loop over layers
+  for (int iL = 0; iL < 7; ++iL ) {
+    vector<int>& tLUT = LUT[iL];
+    vector<float>& x = vX[iL];
+    vector<float>& y = vY[iL];
+    vector<float>& z = vZ[iL];
+    vector<float>& phi = vPhi[iL];
 
-        x = e.GetLayer(iL).x;
-        y = e.GetLayer(iL).y;
-        z = e.GetLayer(iL).z;
-        phi = e.GetLayer(iL).phi;
-        const int size = x.size();
+    x = e.GetLayer(iL).x;
+    y = e.GetLayer(iL).y;
+    z = e.GetLayer(iL).z;
+    phi = e.GetLayer(iL).phi;
+    const int size = x.size();
 
-        /// Use an array of indexes to sort 4 arrays
-        vector<int> idx(size);
-        for (int iC = 0; iC < size; ++iC) idx[iC] = iC;
-        std::sort(begin(idx),end(idx), [&](const int& i, const int& j) {
-            return index(phi[i],z[i],iL) < index(phi[j],z[j],iL); });
+    /// Use an array of indexes to sort 4 arrays
+    vector<int> idx(size);
+    for (int iC = 0; iC < size; ++iC) idx[iC] = iC;
+    std::sort(begin(idx),end(idx), [&](const int& i, const int& j) {
+        return index(phi[i],z[i],iL) < index(phi[j],z[j],iL); });
 
-        for (int iC = 0; iC < size; ++iC) {
-          x[iC] = e.GetLayer(iL).x[idx[iC]];
-          y[iC] = e.GetLayer(iL).y[idx[iC]];
-          z[iC] = e.GetLayer(iL).z[idx[iC]];
-          phi[iC] = e.GetLayer(iL).phi[idx[iC]];
-        }
-
-        /// Fill the lookup-table
-        for (int iC = 0; iC < size; ++iC) {
-
-          while (index(phi[iC],z[iC],iL) > tLUT.size()) {
-            tLUT.push_back(iC);
-          }
-        }
-        while (tLUT.size() <= kNz * kNphi ) tLUT.push_back(size);  // Fix LUT size
-
-#ifdef _OPENCL
-        d_x[iL] = cl::Buffer(context, begin(x), end(x), true);
-        d_y[iL] = cl::Buffer(context, begin(y), end(y), true);
-        d_z[iL] = cl::Buffer(context, begin(z), end(z), true);
-        d_LUT[iL] = cl::Buffer(context, begin(tLUT), end(tLUT), true);
-#endif
-      }
-
-      for (int iL = 0; iL < 6; iL ++) {
-      // int iL = 0;
-
-        /// Create data structures to save tracklets
-        int ntrkls = numTracklets(LUT[iL].data(), LUT[iL+1].data(), kNphi);
-
-        vector<int> vtId0(ntrkls);
-        vector<int> vtId1(ntrkls);
-        vector<float> vtdzdr(ntrkls);
-        vector<float> vtphi(ntrkls);
-
-#ifdef _OPENCL
-        // d_tid0[iL] = cl::Buffer(context, CL_MEM_ALLOC_HOST_PTR, sizeof(float) * ntrkls);
-        // d_tid1[iL] = cl::Buffer(context, CL_MEM_ALLOC_HOST_PTR, sizeof(float) * ntrkls);
-        // d_tdzdr[iL] = cl::Buffer(context, CL_MEM_ALLOC_HOST_PTR, sizeof(float) * ntrkls);
-        // d_tphi[iL] = cl::Buffer(context, CL_MEM_ALLOC_HOST_PTR, sizeof(float) * ntrkls);
-
-        d_tid0[iL] = cl::Buffer(context, begin(vtId0), end(vtId0), true);
-        d_tid1[iL] = cl::Buffer(context, begin(vtId1), end(vtId1), true);
-        d_tdzdr[iL] = cl::Buffer(context, begin(vtdzdr), end(vtdzdr), true);
-        d_tphi[iL] = cl::Buffer(context, begin(vtphi), end(vtphi), true);
-
-        using std::chrono::high_resolution_clock;
-        using std::chrono::microseconds;
-        auto t0 = high_resolution_clock::now();
-
-        Trackleter(cl::EnqueueArgs(queue, cl::NDRange(kNphi * kGroupSize),
-            cl::NDRange(kGroupSize)),
-            d_x[iL],
-            d_y[iL],
-            d_z[iL],
-            d_LUT[iL],
-            d_x[iL+1],
-            d_y[iL+1],
-            d_z[iL+1],
-            d_LUT[iL+1],
-            d_tid0[iL],
-            d_tid1[iL],
-            d_tphi[iL],
-            d_tdzdr[iL],
-            kRadii[iL+1]-kRadii[iL]);
-
-        queue.finish();
-
-        auto t1 = high_resolution_clock::now();
-        microseconds total_ms = std::chrono::duration_cast<microseconds>(t1 - t0);
-        // printf("The kernels ran in %lli microseconds\n", total_ms.count());
-        cout<<" Event: "<<e.GetId()<<" - the kernel ran in "<<total_ms.count()<<" microseconds"<<endl;
-      }
-    } catch (cl::Error err) {
-      std::cout << "Exception\n";
-      std::cerr << "ERROR: " << err.what() << "(" << err_code(err.err()) << ")" << std::endl;
+    for (int iC = 0; iC < size; ++iC) {
+      x[iC] = e.GetLayer(iL).x[idx[iC]];
+      y[iC] = e.GetLayer(iL).y[idx[iC]];
+      z[iC] = e.GetLayer(iL).z[idx[iC]];
+      phi[iC] = e.GetLayer(iL).phi[idx[iC]];
     }
-#endif
-#ifndef _OPENCL
-    using std::chrono::high_resolution_clock;
-    using std::chrono::microseconds;
-    auto t0 = high_resolution_clock::now();
 
+    /// Fill the lookup-table
+    for (int iC = 0; iC < size; ++iC) {
+
+      while (index(phi[iC],z[iC],iL) > tLUT.size()) {
+        tLUT.push_back(iC);
+      }
+    }
+    while (tLUT.size() <= kNz * kNphi ) tLUT.push_back(size);  // Fix LUT size
+
+#ifdef _OPENCL
+    d_x[iL] = cl::Buffer(context, begin(x), end(x), true);
+    d_y[iL] = cl::Buffer(context, begin(y), end(y), true);
+    d_z[iL] = cl::Buffer(context, begin(z), end(z), true);
+    d_LUT[iL] = cl::Buffer(context, begin(tLUT), end(tLUT), true);
+#endif
+  }
+
+
+  vector<int>   vtId0[6];
+  vector<int>   vtId1[6];
+  vector<float> vtdzdr[6];
+  vector<float> vtphi[6];
+  vector<float> vcid0[6];
+  vector<float> vcid1[6];
+  for (int iL = 0; iL < 6; ++iL) {
+    /// Create data structures to save tracklets
+    int ntrkls = numTracklets(LUT[iL].data(), LUT[iL+1].data(), kNphi);
+    vtId0[iL].resize(ntrkls);
+    vtId1[iL].resize(ntrkls);
+    vtdzdr[iL].resize(ntrkls);
+    vtphi[iL].resize(ntrkls);
+    vcid0[iL].resize(ntrkls);
+    vcid1[iL].resize(ntrkls);
+  }
+
+  using std::chrono::high_resolution_clock;
+  using std::chrono::microseconds;
+  auto t0 = high_resolution_clock::now();
+#ifdef _OPENCL
+  try {
+    for (int iL = 0; iL < 6; iL++) {
+      //d_tid0[iL] = cl::Buffer(context, CL_MEM_READ_WRITE, sizeof(float) * vtId0[iL].size());
+      //d_tid1[iL] = cl::Buffer(context, CL_MEM_READ_WRITE, sizeof(float) * vtId0[iL].size());
+      //d_tdzdr[iL] = cl::Buffer(context, CL_MEM_READ_WRITE, sizeof(float) * vtId0[iL].size());
+      //d_tphi[iL] = cl::Buffer(context, CL_MEM_READ_WRITE, sizeof(float) * vtId0[iL].size());
+      d_tid0[iL]  = cl::Buffer(context, begin(vtId0[iL]),  end(vtId0[iL]),  false);
+      d_tid1[iL]  = cl::Buffer(context, begin(vtId1[iL]),  end(vtId1[iL]),  false);
+      d_tdzdr[iL] = cl::Buffer(context, begin(vtdzdr[iL]), end(vtdzdr[iL]), false);
+      d_tphi[iL]  = cl::Buffer(context, begin(vtphi[iL]),  end(vtphi[iL]),  false);
+
+      Trackleter(
+          cl::EnqueueArgs(queue,cl::NDRange(kNphi * kGroupSize), cl::NDRange(kGroupSize)),
+          d_x[iL],
+          d_y[iL],
+          d_z[iL],
+          d_LUT[iL],
+          d_x[iL+1],
+          d_y[iL+1],
+          d_z[iL+1],
+          d_LUT[iL+1],
+          d_tid0[iL],
+          d_tid1[iL],
+          d_tphi[iL],
+          d_tdzdr[iL],
+          kRadii[iL+1]-kRadii[iL]);
+
+      queue.flush();
+
+      d_cid0[iL] = cl::Buffer(context, begin(vcid0[iL]), end(vcid0[iL]), false);
+      d_cid1[iL] = cl::Buffer(context, begin(vcid1[iL]), end(vcid1[iL]), false);
+    }
+  } catch (cl::Error err) {
+    std::cout << "Exception during the Trackleter execution.\n";
+    std::cerr << "ERROR: " << err.what() << "(" << err_code(err.err()) << ")" << std::endl;
+  }
+
+  try {
+    for (int iL = 0; iL < 5; ++iL) {
+      CellFinder(
+          cl::EnqueueArgs(queue,cl::NDRange(kNphi * kGroupSize), cl::NDRange(kGroupSize)),
+          d_tid1[iL],
+          d_tphi[iL],
+          d_tdzdr[iL],
+          d_tid0[iL + 1],
+          d_tphi[iL + 1],
+          d_tdzdr[iL + 1],
+          d_LUT[iL],
+          d_LUT[iL + 1],
+          d_LUT[iL + 2],
+          d_cid1[iL],
+          d_cid0[iL + 1]);
+    }
+  } catch (cl::Error err) {
+    std::cout << "Exception during the CellFinder execution.\n";
+    std::cerr << "ERROR: " << err.what() << "(" << err_code(err.err()) << ")" << std::endl;
+  }
+  queue.finish();
+#else
+  for (int iL = 0; iL < 6; ++iL) {
     for (__GID = 0; __GID < kNphi; ++__GID) {
       for (__LID = 0; __LID < kGroupSize; ++__LID) {
-        Trackleter( vX[iL].data(), vY[iL].data(), vZ[iL].data(), LUT[iL].data(), 
-          vX[iL+1].data(), vY[iL+1].data(), vZ[iL+1].data(), LUT[iL+1].data(), 
-          vtId0.data(), vtId1.data(), vtphi.data(), vtdzdr.data(),
-          kRadii[iL+1]-kRadii[iL] );
+        Trackleter( vX[iL].data(), vY[iL].data(), vZ[iL].data(), LUT[iL].data(),
+            vX[iL+1].data(), vY[iL+1].data(), vZ[iL+1].data(), LUT[iL+1].data(),
+            vtId0[iL].data(), vtId1[iL].data(), vtphi[iL].data(), vtdzdr[iL].data(),
+            kRadii[iL+1]-kRadii[iL] );
       }
     }
-    auto t1 = high_resolution_clock::now();
-
-    microseconds total_ms = std::chrono::duration_cast<microseconds>(t1 - t0);
-    cout<<" Event: "<<e.GetId()<<" - the kernel ran in "<<total_ms.count()<<" microseconds"<<endl;
-#endif
-#ifndef _OPENCL
   }
 #endif
+  auto t1 = high_resolution_clock::now();
+  microseconds total_ms = std::chrono::duration_cast<microseconds>(t1 - t0);
+  cout<<" Event: "<<e.GetId()<<" - the vertexing ran in "<<total_ms.count()<<" microseconds"<<endl;
 
   return 0;
 }
