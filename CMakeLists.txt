@@ -2,16 +2,18 @@ cmake_minimum_required (VERSION 3.3.0)
 project (CPD-EXAM CXX C)
 
 find_package(OpenCL REQUIRED)
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
-set(CMAKE_CXX_FLAGS "-std=c++11 -D__CL_ENABLE_EXCEPTIONS")
-
+find_package(OpenMP REQUIRED)
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+set(CMAKE_CXX_FLAGS "-std=c++11 -D__CL_ENABLE_EXCEPTIONS ${OpenMP_CXX_FLAGS}")
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
 set(CMAKE_CXX_FLAGS_DEBUG "-DDEBUG -g")
 
-include_directories(${CPD-EXAM_SOURCE_DIR}/event ${CPD-EXAM_SOURCE_DIR}/utils ${CPD-EXAM_SOURCE_DIR}/routines ${OpenCL_INCLUDE_DIRS})
+include_directories(${CPD-EXAM_SOURCE_DIR}/event ${CPD-EXAM_SOURCE_DIR}/utils ${CPD-EXAM_SOURCE_DIR}/routines ${CPD-EXAM_SOURCE_DIR}/vertex ${OpenCL_INCLUDE_DIRS})
 add_subdirectory(event)
 add_subdirectory(utils)
+add_subdirectory(vertex)
 add_executable(vertexer main.cc)
 add_executable(dryrun gauge.cc)
-target_link_libraries(vertexer utils event ${OpenCL_LIBRARIES})
+target_link_libraries(vertexer utils event vertex ${OpenCL_LIBRARIES})
 target_link_libraries(dryrun utils event)
 

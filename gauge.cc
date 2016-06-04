@@ -41,8 +41,9 @@ int main(int argc, char** argv) {
   };
 
   /// Loop over the vector of events
-  //for ( Event& e : events ) {
-    Event &e = events[0];
+  for ( Event& e : events ) {
+    // Event &e = events[0];
+    cout<<"Event : "<<e.GetId()<<" -----------------------"<<endl;
     std::array<vector<int>, 7> LUT;
     vector<float> vX[7];
     vector<float> vY[7];
@@ -50,7 +51,7 @@ int main(int argc, char** argv) {
     vector<float> vPhi[7];
 
     int tot_tracklets = 0;
-
+    cout<<"Clusters Data: "<<endl;
     /// Loop over layers
     for (int iL = 0; iL < 7; ++iL ) {
       vector<int>& tLUT = LUT[iL];
@@ -85,9 +86,16 @@ int main(int argc, char** argv) {
           tLUT.push_back(iC);
       }
       while (tLUT.size() <= kNz * kNphi ) tLUT.push_back(size);  // Fix LUT size
-      cout<<"\tSize of layer "<<iL<<": "<<size<<"\t Sizeof tLUT: "<<tLUT.size()<<endl;
-      cout<<"\tAvg clust/bin: "<<x.size()/(kNphi*kNz)<<endl;
+
+      /// Print infos
+      cout<<"<layer "<<iL<<">\n\tlength "<<size<<" | size: "<<size * 4 * sizeof(float)
+        <<" Bytes"<<"\n\tLUT length: "<<tLUT.size()<<" | size: "<<tLUT.size() * sizeof(int)<<" Bytes"<<endl;
+      cout<<"\tAvg. clusters per bin: "<<x.size()/(kNphi*kNz)<<" | size "
+        << int(x.size()/(kNphi*kNz)) * 4 * sizeof(float)<<" Bytes"<<endl;
     }
+    cout<<endl;
+    cout<<"Tracklets Data: "<<endl;
+    // Average tracklets per couple of layers
     for (int iLut = 0; iLut < 6; ++iLut) {
       int n_avg = 0;
       for (int iPhi = 0; iPhi < kNphi; ++iPhi) {
@@ -97,7 +105,10 @@ int main(int argc, char** argv) {
           n_avg+= (first_z1 - first_z0);
         }
       }
-      cout<<"\tAvg tracklets/bin between layer: "<<iLut<<" and "<<iLut+1<<" are: "<<n_avg/(kNz*kNphi)<<endl;
+      cout<<"\tAvg. tracklets per bin from layer: "<<iLut<<" to "<<iLut+1<<": "<<n_avg/(kNz*kNphi)
+        <<" | size: "<< int(n_avg /(kNz*kNphi)) * 2 * sizeof(int) * 2 * sizeof(float)<<" Bytes"<<endl;
     }
+    cout<<endl;
+  }
   return 0;
 }
