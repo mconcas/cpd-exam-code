@@ -4,7 +4,9 @@
 #include <stdlib.h>
 #include <chrono>
 #include <string>
+#include <omp.h>
 #include "Event.h"
+#include "VertexCandidate.h"
 #include "definitions.h"
 #include "util.hpp"
 
@@ -35,8 +37,6 @@ constexpr float kInvDz[7] = {
   0.5 * kNz / 16.333f,0.5 * kNz / 16.333f,0.5 * kNz / 16.333f,0.5 * kNz / 42.140f,
   0.5 * kNz / 42.140f,0.5 * kNz / 73.745f,0.5 * kNz / 73.745f};
 constexpr float kRadii[7] = {2.34,3.15,3.93,19.6,24.55,34.39,39.34};
-
-
 
 int main(int argc, char** argv) {
   if( argv[1] == NULL ) {
@@ -240,5 +240,45 @@ int main(int argc, char** argv) {
   }
 #endif
 
+  /// Vertex Finding and comparison
+  
   return 0;
 }
+
+void computeVertex(int* id0, int* id1, int lenIds,  // Trusted cluster id on layer 0,1
+                int* lut0, int* lut1,               // LUTs layer0, layer1
+                float* x0, float* y0, float* z0,    // Clusters layer0
+                float* x1, float* y1, float* z1,    // Clusters layer1
+                float* final_vertex                 // Vertex array
+               ) 
+{
+  int threads = 1;
+  VertexCandidate vtxcand;
+  #pragma omp parallel
+  {
+    threads = omp_get_num_threads();
+    int tid = omp_get_thread_num();
+    int n = 0;
+    VertexCandidate candidate;
+    #pragma omp for
+    for ( int id = 0; id < lenIds; ++id ) {
+      /// Reconstruct line from data
+      Line l;  
+      l.x[0] = x0[lut0[id0[id]]];
+      l.x[1] = y0[lut0[id0[id]]];        
+      l.x[2] = z0[lut0[id0[id]]];
+      l.c[0] = x1[lut1[id1[id]]] - x0[lut0[id0[id]]];
+      l.c[1] = y1[lut1[id1[id]]] - y0[lut0[id0[id]]];
+      l.c[2] = z1[lut1[id1[id]]] - z0[lut0[id0[id]]];
+      candidate.Add(l);
+    }
+    #pragma omp critical
+    {
+      vtxcand.Add(candidate);
+    }
+  }
+  vtxcand.ComputeClusterCentroid();
+  vtxcand.GetVertex(final_vertex);
+} 
+
+
