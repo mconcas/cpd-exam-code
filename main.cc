@@ -17,8 +17,8 @@
   #include "cl.hpp"
   #define VERSION "OpenCL"
   #ifndef DEVICE
-  #define DEVICE CL_DEVICE_TYPE_CPU
-  // #define DEVICE CL_DEVICE_TYPE_ACCELERATOR
+  //#define DEVICE CL_DEVICE_TYPE_CPU
+  #define DEVICE CL_DEVICE_TYPE_ACCELERATOR
   #endif
 #endif
 
@@ -134,7 +134,7 @@ int main(int argc, char** argv) {
         phi = e.GetLayer(iL).phi;
         const int size = x.size();
 
-        /// Use an array of indexes to sort 4 arrays 
+        /// Use an array of indexes to sort 4 arrays
         vector<int> idx(size);
         for (int iC = 0; iC < size; ++iC) idx[iC] = iC;
         std::sort(begin(idx),end(idx), [&](const int& i, const int& j) {
@@ -147,7 +147,7 @@ int main(int argc, char** argv) {
           phi[iC] = e.GetLayer(iL).phi[idx[iC]];
         }
 
-        /// Fill the lookup-table 
+        /// Fill the lookup-table
         for (int iC = 0; iC < size; ++iC) {
 
           while (index(phi[iC],z[iC],iL) > tLUT.size()) {
@@ -156,21 +156,12 @@ int main(int argc, char** argv) {
         }
         while (tLUT.size() <= kNz * kNphi ) tLUT.push_back(size);  // Fix LUT size
 
-
-        // int mean_clu = 0;
-
-        /* for (int i = 0; i < tLUT.size()-1; ++i) {
-          mean_clu += (tLUT[i+1] - tLUT[i]);
-        }*/
-
 #ifdef _OPENCL
         d_x[iL] = cl::Buffer(context, begin(x), end(x), true);
         d_y[iL] = cl::Buffer(context, begin(y), end(y), true);
         d_z[iL] = cl::Buffer(context, begin(z), end(z), true);
         d_LUT[iL] = cl::Buffer(context, begin(tLUT), end(tLUT), true);
 #endif
-        cout<<"\tSize of layer "<<iL<<": "<<size<<"\t Sizeof tLUT: "<<tLUT.size()<<endl;
-        cout<<"\tAvg clust/bin: "<<x.size()/(kNphi*kNz)<<endl;
       }
 
       for (int iL = 0; iL < 6; iL ++) {
