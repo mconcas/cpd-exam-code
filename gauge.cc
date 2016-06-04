@@ -10,20 +10,6 @@
 int __GID = 0;
 int __LID = 0;
 
-#ifdef _OPENCL
-  #define __kernel
-  #define __global
-  #define __local
-  #define M_PI_F (3.14159265359f)
-  extern int __GID;
-  extern int __LID;
-  inline int get_local_size(int) { return kGroupSize; }
-  inline int get_group_id(int) { return __GID; }
-  inline int get_local_id(int) { return __LID; }
-#endif
-
-#include "Trackleter.cl"
-
 using std::vector;
 using std::begin;
 using std::end;
@@ -63,7 +49,7 @@ int main(int argc, char** argv) {
     vector<float> vY[7];
     vector<float> vZ[7];
     vector<float> vPhi[7];
-      
+
     int tot_tracklets = 0;
     cout<<"Clusters Data: "<<endl;
     /// Loop over layers
@@ -79,8 +65,8 @@ int main(int argc, char** argv) {
       z = e.GetLayer(iL).z;
       phi = e.GetLayer(iL).phi;
       const int size = x.size();
-        
-      /// Use an array of indexes to sort 4 arrays 
+
+      /// Use an array of indexes to sort 4 arrays
       vector<int> idx(size);
       for (int iC = 0; iC < size; ++iC) idx[iC] = iC;
       std::sort(begin(idx),end(idx), [&](const int& i, const int& j) {
@@ -94,7 +80,7 @@ int main(int argc, char** argv) {
         phi[iC] = e.GetLayer(iL).phi[idx[iC]];
       }
 
-      /// Fill the lookup-table 
+      /// Fill the lookup-table
       for (int iC = 0; iC < size; ++iC) {
         while (index(phi[iC],z[iC],iL) > tLUT.size())
           tLUT.push_back(iC);
@@ -116,7 +102,7 @@ int main(int argc, char** argv) {
         for (int iZ = 0; iZ < kNz; ++iZ) {
           int first_z1 = firstTracklet(LUT[iLut].data(), LUT[iLut + 1].data(), iPhi, iZ+1);
           int first_z0 = firstTracklet(LUT[iLut].data(), LUT[iLut + 1].data(), iPhi, iZ);
-          n_avg+= (first_z1 - first_z0); 
+          n_avg+= (first_z1 - first_z0);
         }
       }
       cout<<"\tAvg. tracklets per bin from layer: "<<iLut<<" to "<<iLut+1<<": "<<n_avg/(kNz*kNphi)
