@@ -8,24 +8,24 @@ int get_nclusters_phi(__local int* lut, int iPhi) {
 int get_nclusters_phi_z(__local int* lut, int iPhi, int iZ) {
     iPhi &= (kNphi - 1);
     return lut[iPhi * kNz + iZ + 1] - lut[iPhi * kNz + iZ];
-}
+};
 
-int n_tracklets(__local int* lut0, __local int* lut1, int nphi) {
+int n_tracklets_local(__local int* lut0, __local int* lut1, int nphi) {
     int n = 0;
     for (int i = 0; i < nphi; ++i)
         n += get_nclusters_phi(lut0,i) * (get_nclusters_phi(lut1,i + 1) + get_nclusters_phi(lut1,i) + get_nclusters_phi(lut1,i - 1));
     return n;
-}
+};
 
 int n_tracklet_phi_z(__local int* lut0, __local int* lut1, int nphi0, int nz0) {
-    int n = n_tracklets(lut0,lut1,nphi0);
+    int n = n_tracklets_local(lut0,lut1,nphi0);
 
     int mult = (get_nclusters_phi(lut1,nphi0 + 1) + get_nclusters_phi(lut1,nphi0) + get_nclusters_phi(lut1,nphi0 - 1));
     for (int iZ0 = 0; iZ0 < nz0; ++iZ0) {
         n += get_nclusters_phi_z(lut0,nphi0,iZ0) * mult;
     }
     return n;
-}
+};
 
 __kernel void CellFinder(
         __global int*   id1_0,

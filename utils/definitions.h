@@ -1,6 +1,6 @@
-#ifndef _OPENCL
-#define _OPENCL
-#endif
+// #ifndef _OPENCL
+// #define _OPENCL
+// #endif
 #ifndef UTILITIES_H
 #define UTILITIES_H
 
@@ -23,8 +23,9 @@
   #define M_PI_F (3.14159265359f)
   extern int __GID;
   extern int __LID;
+  extern int __NGP;
 
-  inline int get_local_size(int) { return kGroupSize; }
+  // inline int get_local_size(int) { return kGroupSize; }
 #endif
 
 #endif
