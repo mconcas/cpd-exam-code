@@ -1,23 +1,23 @@
 #include "definitions.h"
 
-int get_nclusters_phi(__global int* lut, int iPhi) {
+int get_nclusters_phi(__local int* lut, int iPhi) {
     iPhi &= (kNphi - 1);
     return lut[(iPhi + 1) * kNz] - lut[iPhi * kNz];
 };
 
-int get_nclusters_phi_z(__global int* lut, int iPhi, int iZ) {
+int get_nclusters_phi_z(__local int* lut, int iPhi, int iZ) {
     iPhi &= (kNphi - 1);
     return lut[iPhi * kNz + iZ + 1] - lut[iPhi * kNz + iZ];
 }
 
-int n_tracklets(__global int* lut0, __global int* lut1, int nphi) {
+int n_tracklets(__local int* lut0, __local int* lut1, int nphi) {
     int n = 0;
     for (int i = 0; i < nphi; ++i)
         n += get_nclusters_phi(lut0,i) * (get_nclusters_phi(lut1,i + 1) + get_nclusters_phi(lut1,i) + get_nclusters_phi(lut1,i - 1));
     return n;
 }
 
-int n_tracklet_phi_z(__global int* lut0, __global int* lut1, int nphi0, int nz0) {
+int n_tracklet_phi_z(__local int* lut0, __local int* lut1, int nphi0, int nz0) {
     int n = n_tracklets(lut0,lut1,nphi0);
 
     int mult = (get_nclusters_phi(lut1,nphi0 + 1) + get_nclusters_phi(lut1,nphi0) + get_nclusters_phi(lut1,nphi0 - 1));
@@ -34,9 +34,9 @@ __kernel void CellFinder(
         __global int*   id0_1,
         __global float* phi1,
         __global float* dzdr1,
-        __global int*   lut0,
-        __global int*   lut1,
-        __global int*   lut2,
+        __global int*   glut0,
+        __global int*   glut1,
+        __global int*   glut2,
         __global int*   neigh0,
         __global int*   neigh1
         ) {
@@ -47,6 +47,16 @@ __kernel void CellFinder(
 
     /// Local ID
     const int local_id = get_local_id(0);
+
+    /// Staging LUTs to local memory (x2 speedup)
+    __local int lut0[kNz * kNphi + 1];
+    __local int lut1[kNz * kNphi + 1];
+    __local int lut2[kNz * kNphi + 1];
+    for (int i = 0; i < kNz * kNphi + 1; ++i) {
+        lut0[i] = glut0[i];
+        lut1[i] = glut1[i];
+        lut2[i] = glut2[i];
+    }
 
     for (int iteration = group_id * group_size; iteration < kNz * kNphi; iteration += group_size * get_num_groups(0)) {
         const int current_phi = iteration / kNz;
