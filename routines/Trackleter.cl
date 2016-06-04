@@ -3,13 +3,16 @@
 #ifndef _OPENCL
 inline int get_group_id(int) { return __GID; }
 inline int get_local_id(int) { return __LID; }
+inline int get_num_groups(int) { return kNgroups; }
+inline int get_local_size(int) { return kGroupSize; }
 #endif
 
 int get_nclusters(__global int* lut, int iPhi) {
     iPhi &= (kNphi - 1);
     return lut[(iPhi + 1) * kNz] - lut[iPhi * kNz];
 };
-int n_tracklets(__global int* lut0, __global int* lut1, int nphi) {
+
+int n_tracklets_global(__global int* lut0, __global int* lut1, int nphi) {
     int n = 0;
     for (int i = 0; i < nphi; ++i)
         n += get_nclusters(lut0,i) * (get_nclusters(lut1,i + 1) + get_nclusters(lut1,i) + get_nclusters(lut1,i - 1));
@@ -42,7 +45,7 @@ __kernel void Trackleter(
         const int first_cluster0 = lut0[iteration * kNz];
         const int last_cluster0  = lut0[(iteration + 1) * kNz];
 
-        const int first_trkl = n_tracklets(lut0,lut1,iteration);
+        const int first_trkl = n_tracklets_global(lut0,lut1,iteration);
         const int n_trkl = get_nclusters(lut1,iteration + 1) + get_nclusters(lut1,iteration) + get_nclusters(lut1,iteration - 1);
 
         __local float x_0;

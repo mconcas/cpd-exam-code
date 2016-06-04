@@ -13,14 +13,15 @@
 #ifndef _OPENCL
 #define VERSION "Serial"
 #include "Trackleter.cl"
+#include "CellFinder.cl"
 int __GID = 0;
 int __LID = 0;
 #else
 #include "cl.hpp"
 #define VERSION "OpenCL"
 #ifndef DEVICE
-#define DEVICE CL_DEVICE_TYPE_CPU
-//#define DEVICE CL_DEVICE_TYPE_ACCELERATOR
+// #define DEVICE CL_DEVICE_TYPE_CPU
+#define DEVICE CL_DEVICE_TYPE_ACCELERATOR
 #endif
 #endif
 
@@ -169,8 +170,8 @@ int main(int argc, char** argv) {
   vector<int>   vtId1[6];
   vector<float> vtdzdr[6];
   vector<float> vtphi[6];
-  vector<float> vcid0[6];
-  vector<float> vcid1[6];
+  vector<int> vcid0[6];
+  vector<int> vcid1[6];
   for (int iL = 0; iL < 6; ++iL) {
     /// Create data structures to save tracklets
     int ntrkls = numTracklets(LUT[iL].data(), LUT[iL+1].data(), kNphi);
@@ -251,17 +252,31 @@ int main(int argc, char** argv) {
         Trackleter( vX[iL].data(), vY[iL].data(), vZ[iL].data(), LUT[iL].data(),
             vX[iL+1].data(), vY[iL+1].data(), vZ[iL+1].data(), LUT[iL+1].data(),
             vtId0[iL].data(), vtId1[iL].data(), vtphi[iL].data(), vtdzdr[iL].data(),
-            kRadii[iL+1]-kRadii[iL] );
+            kRadii[iL+1]-kRadii[iL]);
       }
     }
   }
+
+  for (int iL = 0; iL < 5; ++iL) {
+    for (__GID = 0; __GID < kNphi; ++__GID) {
+      for (__LID = 0; __LID < kGroupSize; ++__LID) {
+        CellFinder( vtId1[iL].data(), vtphi[iL].data(), vtdzdr[iL].data(), 
+            vtId0[iL+1].data(), vtphi[iL+1].data(), vtdzdr[iL+1].data(), 
+            LUT[iL].data(), LUT[iL+1].data(), LUT[iL+2].data(), 
+            vcid1[iL].data(), vcid0[iL+1].data());
+        cout<<__LID<<"\t"<<__GID<<"\t"<<iL<<endl;
+      }
+    }
+  }
+
 #endif
   auto t1 = high_resolution_clock::now();
   microseconds total_ms = std::chrono::duration_cast<microseconds>(t1 - t0);
   cout<<" Event: "<<e.GetId()<<" - the vertexing ran in "<<total_ms.count()<<" microseconds"<<endl;
 
   /// Vertex Finding and comparison
-  
+  float vtx[3];
+  // computeVertex(vtx);
   return 0;
 }
 
@@ -273,6 +288,7 @@ void computeVertex(int* id0, int* id1, int lenIds,  // Trusted cluster id on lay
                ) 
 {
   int threads = 1;
+
   VertexCandidate vtxcand;
   #pragma omp parallel
   {
