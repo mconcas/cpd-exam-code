@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <stdlib.h>
 #include <chrono>
+#include <string>
 #include "Event.h"
 #include "definitions.h"
 #include "util.hpp"
@@ -21,19 +22,6 @@
   #endif
 #endif
 
-#ifdef DEVICE
-  #if (DEVICE == CL_DEVICE_TYPE_ACCELERATOR)
-    #define ARCH "XeonPhi"
-  #elif (DEVICE == CL_DEVICE_TYPE_CPU)
-    #define ARCH "CPU"
-  #elif (DEVICE == CL_DEVICE_TYPE_GPU)
-    #define ARCH "GPU"
-  #endif
-#else 
-  #define ARCH "CPU"
-#endif
-
-
 using std::vector;
 using std::begin;
 using std::end;
@@ -51,7 +39,6 @@ constexpr float kRadii[7] = {2.34,3.15,3.93,19.6,24.55,34.39,39.34};
 
 
 int main(int argc, char** argv) {
-  cout<<VERSION<<" vertexer running on "<<ARCH<<endl;
   if( argv[1] == NULL ) {
     std::cerr<<"Please, provide a data file."<<std::endl;
     exit(EXIT_FAILURE);
@@ -71,9 +58,13 @@ int main(int argc, char** argv) {
   /// Set context with a DEVICE
   cl::Context context(DEVICE);
   auto devices = context.getInfo<CL_CONTEXT_DEVICES>();
-  
+  std::string s;
+  devices[0].getInfo(CL_DEVICE_NAME, &s);
+  std::cout << "\n\t\t" << VERSION << " vertexer running on: " << s << std::endl << std::endl;
+
   /// Create the Program, load and compile kernel
   cl::Program program_trackleter(context, util::loadProgram("routines/Trackleter.cl"));
+  cl::Program program_cellfinder(context, util::loadProgram("routines/CellFinder.cl"));
   try {
     program_trackleter.build(devices,"-Iutils");
   } catch(cl::Error err) {
@@ -84,21 +75,31 @@ int main(int argc, char** argv) {
     std::cout << "Build Log:\t " << program_trackleter.getBuildInfo<CL_PROGRAM_BUILD_LOG>(devices[0]);
     std::cout << std::endl;
   }
-  
+  try {
+    program_cellfinder.build(devices,"-Iutils");
+  } catch(cl::Error err) {
+    std::cout << "Build Status: " << program_cellfinder.getBuildInfo<CL_PROGRAM_BUILD_STATUS>(devices[0]);
+    std::cout << std::endl;
+    std::cout << "Build Options:\t" << program_cellfinder.getBuildInfo<CL_PROGRAM_BUILD_OPTIONS>(devices[0]);
+    std::cout<< std::endl;
+    std::cout << "Build Log:\t " << program_cellfinder.getBuildInfo<CL_PROGRAM_BUILD_LOG>(devices[0]);
+    std::cout << std::endl;
+  }
+
   // Enqueue the context
   cl::CommandQueue queue(context);
-  
+
   /// Create kernel function
   auto Trackleter = cl::make_kernel<cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,
        cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer, float>(program_trackleter, "Trackleter");
 
-  cl::Buffer d_x[7];      
-  cl::Buffer d_y[7];      
-  cl::Buffer d_z[7];      
+  cl::Buffer d_x[7];
+  cl::Buffer d_y[7];
+  cl::Buffer d_z[7];
   cl::Buffer d_LUT[7];
-  cl::Buffer d_radii[7];  
+  cl::Buffer d_radii[7];
   cl::Buffer d_tid0[6];
-  cl::Buffer d_tid1[6]; 
+  cl::Buffer d_tid1[6];
   cl::Buffer d_tdzdr[6];
   cl::Buffer d_tphi[6];
   cl::Buffer d_cid1[5];
@@ -116,7 +117,7 @@ int main(int argc, char** argv) {
 #ifdef _OPENCL
     try {
 #endif
-      
+
       int tot_tracklets = 0;
 
       /// Loop over layers
@@ -132,7 +133,7 @@ int main(int argc, char** argv) {
         z = e.GetLayer(iL).z;
         phi = e.GetLayer(iL).phi;
         const int size = x.size();
-        
+
         /// Use an array of indexes to sort 4 arrays 
         vector<int> idx(size);
         for (int iC = 0; iC < size; ++iC) idx[iC] = iC;
@@ -154,10 +155,10 @@ int main(int argc, char** argv) {
           }
         }
         while (tLUT.size() <= kNz * kNphi ) tLUT.push_back(size);  // Fix LUT size
-        
-        
+
+
         // int mean_clu = 0;
-        
+
         /* for (int i = 0; i < tLUT.size()-1; ++i) {
           mean_clu += (tLUT[i+1] - tLUT[i]);
         }*/
@@ -174,7 +175,7 @@ int main(int argc, char** argv) {
 
       for (int iL = 0; iL < 6; iL ++) {
       // int iL = 0;
-      
+
         /// Create data structures to save tracklets
         int ntrkls = numTracklets(LUT[iL].data(), LUT[iL+1].data(), kNphi);
 
@@ -188,7 +189,7 @@ int main(int argc, char** argv) {
         // d_tid1[iL] = cl::Buffer(context, CL_MEM_ALLOC_HOST_PTR, sizeof(float) * ntrkls);
         // d_tdzdr[iL] = cl::Buffer(context, CL_MEM_ALLOC_HOST_PTR, sizeof(float) * ntrkls);
         // d_tphi[iL] = cl::Buffer(context, CL_MEM_ALLOC_HOST_PTR, sizeof(float) * ntrkls);
-        
+
         d_tid0[iL] = cl::Buffer(context, begin(vtId0), end(vtId0), true);
         d_tid1[iL] = cl::Buffer(context, begin(vtId1), end(vtId1), true);
         d_tdzdr[iL] = cl::Buffer(context, begin(vtdzdr), end(vtdzdr), true);
