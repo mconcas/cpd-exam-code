@@ -10,7 +10,11 @@
 #define kNz   2
 #define kNphi 256
 
+#define kDzDrTol 0.02f
+#define kDphiTol 0.1f
+
 #define kGroupSize 32
+#define kNgroups (kNz * kNphi / kGroupSize)
 
 #ifndef _OPENCL
   #define __kernel
