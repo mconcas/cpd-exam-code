@@ -1,12 +1,5 @@
 #include "definitions.h"
 
-#ifndef _OPENCL
-inline int get_group_id(int) { return __GID; }
-inline int get_local_id(int) { return __LID; }
-inline int get_num_groups(int) { return kNgroups; }
-inline int get_local_size(int) { return kGroupSize; }
-#endif
-
 int get_nclusters(__global int* lut, int iPhi) {
     iPhi &= (kNphi - 1);
     return lut[(iPhi + 1) * kNz] - lut[iPhi * kNz];

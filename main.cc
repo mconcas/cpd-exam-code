@@ -19,10 +19,6 @@ int __LID = 0;
 #else
 #include "cl.hpp"
 #define VERSION "OpenCL"
-#ifndef DEVICE
-// #define DEVICE CL_DEVICE_TYPE_CPU
-#define DEVICE CL_DEVICE_TYPE_ACCELERATOR
-#endif
 #endif
 
 using std::vector;
@@ -258,13 +254,12 @@ int main(int argc, char** argv) {
   }
 
   for (int iL = 0; iL < 5; ++iL) {
-    for (__GID = 0; __GID < kNphi; ++__GID) {
+    for (__GID = 0; __GID < kNgroups; ++__GID) {
       for (__LID = 0; __LID < kGroupSize; ++__LID) {
-        CellFinder( vtId1[iL].data(), vtphi[iL].data(), vtdzdr[iL].data(), 
-            vtId0[iL+1].data(), vtphi[iL+1].data(), vtdzdr[iL+1].data(), 
-            LUT[iL].data(), LUT[iL+1].data(), LUT[iL+2].data(), 
+        CellFinder( vtId1[iL].data(), vtphi[iL].data(), vtdzdr[iL].data(),
+            vtId0[iL+1].data(), vtphi[iL+1].data(), vtdzdr[iL+1].data(),
+            LUT[iL].data(), LUT[iL+1].data(), LUT[iL+2].data(),
             vcid1[iL].data(), vcid0[iL+1].data());
-        cout<<__LID<<"\t"<<__GID<<"\t"<<iL<<endl;
       }
     }
   }
@@ -285,7 +280,7 @@ void computeVertex(int* id0, int* id1, int lenIds,  // Trusted cluster id on lay
                 float* x0, float* y0, float* z0,    // Clusters layer0
                 float* x1, float* y1, float* z1,    // Clusters layer1
                 float* final_vertex                 // Vertex array
-               ) 
+               )
 {
   int threads = 1;
 
@@ -299,9 +294,9 @@ void computeVertex(int* id0, int* id1, int lenIds,  // Trusted cluster id on lay
     #pragma omp for
     for ( int id = 0; id < lenIds; ++id ) {
       /// Reconstruct line from data
-      Line l;  
+      Line l;
       l.x[0] = x0[lut0[id0[id]]];
-      l.x[1] = y0[lut0[id0[id]]];        
+      l.x[1] = y0[lut0[id0[id]]];
       l.x[2] = z0[lut0[id0[id]]];
       l.c[0] = x1[lut1[id1[id]]] - x0[lut0[id0[id]]];
       l.c[1] = y1[lut1[id1[id]]] - y0[lut0[id0[id]]];
@@ -315,6 +310,6 @@ void computeVertex(int* id0, int* id1, int lenIds,  // Trusted cluster id on lay
   }
   vtxcand.ComputeClusterCentroid();
   vtxcand.GetVertex(final_vertex);
-} 
+}
 
 
