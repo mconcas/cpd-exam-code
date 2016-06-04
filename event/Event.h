@@ -48,4 +48,6 @@ class Event {
 vector<Event> load_data(char* fname);
 int numCluster(int* lut, int iPhi);
 int numTracklets(int* lut0, int* lut1, int nphi);
+int firstTracklet(int* lut0, int* lut1, int nphi0, int nz0);
+int numClustersByZ(int* lut, int iPhi, int iZ);
 #endif

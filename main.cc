@@ -8,23 +8,37 @@
 #include "util.hpp"
 
 #ifndef _OPENCL
+  #define VERSION "Serial"
   #include "Trackleter.cl"
   int __GID = 0;
   int __LID = 0;
 #else
   #include "cl.hpp"
+  #define VERSION "OpenCL"
+  #ifndef DEVICE
+  #define DEVICE CL_DEVICE_TYPE_CPU
+  // #define DEVICE CL_DEVICE_TYPE_ACCELERATOR
+  #endif
 #endif
+
+#ifdef DEVICE
+  #if (DEVICE == CL_DEVICE_TYPE_ACCELERATOR)
+    #define ARCH "XeonPhi"
+  #elif (DEVICE == CL_DEVICE_TYPE_CPU)
+    #define ARCH "CPU"
+  #elif (DEVICE == CL_DEVICE_TYPE_GPU)
+    #define ARCH "GPU"
+  #endif
+#else 
+  #define ARCH "CPU"
+#endif
+
 
 using std::vector;
 using std::begin;
 using std::end;
 using std::cout;
 using std::endl;
-
-#ifndef DEVICE
-// #define DEVICE CL_DEVICE_TYPE_CPU
-#define DEVICE CL_DEVICE_TYPE_ACCELERATOR
-#endif
 
 constexpr float kDphi = kTwoPi / kNphi;
 constexpr float kInvDphi = kNphi / kTwoPi;
@@ -37,13 +51,14 @@ constexpr float kRadii[7] = {2.34,3.15,3.93,19.6,24.55,34.39,39.34};
 
 
 int main(int argc, char** argv) {
-
+  cout<<VERSION<<" vertexer running on "<<ARCH<<endl;
   if( argv[1] == NULL ) {
     std::cerr<<"Please, provide a data file."<<std::endl;
     exit(EXIT_FAILURE);
   }
 
   vector<Event> events( load_data(argv[1]) );
+
 
   auto index = [&](const float phi, float z, int l) {
     return int(phi * kInvDphi) * kNz + int((z + kZ[l]) * kInvDz[l]);
@@ -81,7 +96,6 @@ int main(int argc, char** argv) {
   cl::Buffer d_y[7];      
   cl::Buffer d_z[7];      
   cl::Buffer d_LUT[7];
-  // cl::Buffer d_phi[7];  
   cl::Buffer d_radii[7];  
   cl::Buffer d_tid0[6];
   cl::Buffer d_tid1[6]; 
@@ -90,7 +104,7 @@ int main(int argc, char** argv) {
   cl::Buffer d_cid1[5];
 #endif
 
-  /// Events loop
+  /// Loop over the vector of events
   //for ( Event& e : events ) {
     Event &e = events[0];
     std::array<vector<int>, 7> LUT;
@@ -99,13 +113,14 @@ int main(int argc, char** argv) {
     vector<float> vZ[7];
     vector<float> vPhi[7];
 
-    /// Cluster sort
 #ifdef _OPENCL
     try {
 #endif
       
-      for (int iL = 0; iL < 7; ++iL ) {
+      int tot_tracklets = 0;
 
+      /// Loop over layers
+      for (int iL = 0; iL < 7; ++iL ) {
         vector<int>& tLUT = LUT[iL];
         vector<float>& x = vX[iL];
         vector<float>& y = vY[iL];
@@ -140,15 +155,12 @@ int main(int argc, char** argv) {
         }
         while (tLUT.size() <= kNz * kNphi ) tLUT.push_back(size);  // Fix LUT size
         
-        /*
-        int mean = 0;
         
-        for (int i = 0; i < tLUT.size()-1; ++i) {
-          mean += (tLUT[i+1] - tLUT[i]);
-        }
-        cout<<"Size tLUT: "<<tLUT.size()<<" layer: "<<iL<<" Event: "<<e.GetId()<<endl;
-        cout<<"Size of layer "<<iL<<" is: "<<size<<endl;
-        */
+        // int mean_clu = 0;
+        
+        /* for (int i = 0; i < tLUT.size()-1; ++i) {
+          mean_clu += (tLUT[i+1] - tLUT[i]);
+        }*/
 
 #ifdef _OPENCL
         d_x[iL] = cl::Buffer(context, begin(x), end(x), true);
@@ -156,6 +168,8 @@ int main(int argc, char** argv) {
         d_z[iL] = cl::Buffer(context, begin(z), end(z), true);
         d_LUT[iL] = cl::Buffer(context, begin(tLUT), end(tLUT), true);
 #endif
+        cout<<"\tSize of layer "<<iL<<": "<<size<<"\t Sizeof tLUT: "<<tLUT.size()<<endl;
+        cout<<"\tAvg clust/bin: "<<x.size()/(kNphi*kNz)<<endl;
       }
 
       for (int iL = 0; iL < 6; iL ++) {
@@ -204,8 +218,8 @@ int main(int argc, char** argv) {
 
         auto t1 = high_resolution_clock::now();
         microseconds total_ms = std::chrono::duration_cast<microseconds>(t1 - t0);
-        printf("The kernels ran in %lli microseconds\n", total_ms.count());
-
+        // printf("The kernels ran in %lli microseconds\n", total_ms.count());
+        cout<<" Event: "<<e.GetId()<<" - the kernel ran in "<<total_ms.count()<<" microseconds"<<endl;
       }
     } catch (cl::Error err) {
       std::cout << "Exception\n";
@@ -220,17 +234,19 @@ int main(int argc, char** argv) {
     for (__GID = 0; __GID < kNphi; ++__GID) {
       for (__LID = 0; __LID < kGroupSize; ++__LID) {
         Trackleter( vX[iL].data(), vY[iL].data(), vZ[iL].data(), LUT[iL].data(), 
-          vX[iL + 1].data(), vY[iL + 1].data(), vZ[iL + 1].data(), LUT[iL + 1].data(), 
+          vX[iL+1].data(), vY[iL+1].data(), vZ[iL+1].data(), LUT[iL+1].data(), 
           vtId0.data(), vtId1.data(), vtphi.data(), vtdzdr.data(),
-          kRadii[iL + 1]-kRadii[iL] );
+          kRadii[iL+1]-kRadii[iL] );
       }
     }
     auto t1 = high_resolution_clock::now();
+
     microseconds total_ms = std::chrono::duration_cast<microseconds>(t1 - t0);
-    printf("The kernels ran in %lli microseconds\n", total_ms.count());
+    cout<<" Event: "<<e.GetId()<<" - the kernel ran in "<<total_ms.count()<<" microseconds"<<endl;
 #endif
 #ifndef _OPENCL
   }
 #endif
+
   return 0;
 }

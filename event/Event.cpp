@@ -76,3 +76,17 @@ int numTracklets(int* lut0, int* lut1, int nphi) {
     return n;
 };
 
+
+int firstTracklet(int* lut0, int* lut1, int nphi0, int nz0) {
+  int n = numTracklets(lut0,lut1,nphi0);
+  int mult = (numCluster(lut1,nphi0 + 1) + numCluster(lut1,nphi0) + numCluster(lut1,nphi0 - 1));
+  for (int iZ0 = 0; iZ0 < nz0; ++iZ0) 
+    n += numClustersByZ(lut0,nphi0,iZ0) * mult; 
+  return n;
+};
+
+int numClustersByZ(int* lut, int iPhi, int iZ) {
+  iPhi &= (kNphi - 1);
+  return lut[iPhi*kNz + iZ + 1] - lut[iPhi*kNz + iZ];
+};
+

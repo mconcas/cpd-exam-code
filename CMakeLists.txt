@@ -11,5 +11,7 @@ include_directories(${CPD-EXAM_SOURCE_DIR}/event ${CPD-EXAM_SOURCE_DIR}/utils ${
 add_subdirectory(event)
 add_subdirectory(utils)
 add_executable(vertexer main.cc)
+add_executable(dryrun gauge.cc)
 target_link_libraries(vertexer utils event ${OpenCL_LIBRARIES})
+target_link_libraries(dryrun utils event)
 
