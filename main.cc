@@ -113,6 +113,7 @@ int main(int argc, char** argv) {
   vector<float> vY[7];
   vector<float> vZ[7];
   vector<float> vPhi[7];
+  vector<int>   vMcl[7];
 
 
   int tot_tracklets = 0;
@@ -124,11 +125,13 @@ int main(int argc, char** argv) {
     vector<float>& y = vY[iL];
     vector<float>& z = vZ[iL];
     vector<float>& phi = vPhi[iL];
+    vector<int>&   mcl = vMcl[iL];
 
     x = e.GetLayer(iL).x;
     y = e.GetLayer(iL).y;
     z = e.GetLayer(iL).z;
     phi = e.GetLayer(iL).phi;
+    mcl = e.GetLayer(iL).mcl;
     const int size = x.size();
 
     /// Use an array of indexes to sort 4 arrays
@@ -142,6 +145,7 @@ int main(int argc, char** argv) {
       y[iC] = e.GetLayer(iL).y[idx[iC]];
       z[iC] = e.GetLayer(iL).z[idx[iC]];
       phi[iC] = e.GetLayer(iL).phi[idx[iC]];
+      mcl[iC] = e.GetLayer(iL).mcl[idx[iC]];
     }
 
     /// Fill the lookup-table
@@ -175,8 +179,8 @@ int main(int argc, char** argv) {
     vtId1[iL].resize(ntrkls);
     vtdzdr[iL].resize(ntrkls);
     vtphi[iL].resize(ntrkls);
-    vcid0[iL].resize(ntrkls);
-    vcid1[iL].resize(ntrkls);
+    vcid0[iL].resize(ntrkls,-1);
+    vcid1[iL].resize(ntrkls,-1);
   }
 
   using std::chrono::high_resolution_clock;
@@ -185,10 +189,6 @@ int main(int argc, char** argv) {
 #ifdef _OPENCL
   try {
     for (int iL = 0; iL < 6; iL++) {
-      //d_tid0[iL] = cl::Buffer(context, CL_MEM_READ_WRITE, sizeof(float) * vtId0[iL].size());
-      //d_tid1[iL] = cl::Buffer(context, CL_MEM_READ_WRITE, sizeof(float) * vtId0[iL].size());
-      //d_tdzdr[iL] = cl::Buffer(context, CL_MEM_READ_WRITE, sizeof(float) * vtId0[iL].size());
-      //d_tphi[iL] = cl::Buffer(context, CL_MEM_READ_WRITE, sizeof(float) * vtId0[iL].size());
       d_tid0[iL]  = cl::Buffer(context, begin(vtId0[iL]),  end(vtId0[iL]),  false);
       d_tid1[iL]  = cl::Buffer(context, begin(vtId1[iL]),  end(vtId1[iL]),  false);
       d_tdzdr[iL] = cl::Buffer(context, begin(vtdzdr[iL]), end(vtdzdr[iL]), false);
@@ -214,6 +214,9 @@ int main(int argc, char** argv) {
 
       d_cid0[iL] = cl::Buffer(context, begin(vcid0[iL]), end(vcid0[iL]), false);
       d_cid1[iL] = cl::Buffer(context, begin(vcid1[iL]), end(vcid1[iL]), false);
+      //TODO: use non-blocking I/O
+      cl::copy(queue,d_tid0[iL],begin(vtId0[iL]),end(vtId0[iL]));
+      cl::copy(queue,d_tid1[iL],begin(vtId1[iL]),end(vtId1[iL]));
     }
   } catch (cl::Error err) {
     std::cout << "Exception during the Trackleter execution.\n";
@@ -235,6 +238,8 @@ int main(int argc, char** argv) {
           d_LUT[iL + 2],
           d_cid1[iL],
           d_cid0[iL + 1]);
+      cl::copy(queue,d_cid0[iL + 1],begin(vcid0[iL + 1]),end(vcid0[iL + 1]));
+      cl::copy(queue,d_cid1[iL],begin(vcid1[iL]),end(vcid1[iL]));
     }
   } catch (cl::Error err) {
     std::cout << "Exception during the CellFinder execution.\n";
@@ -271,27 +276,48 @@ int main(int argc, char** argv) {
 
   /// Vertex Finding and comparison
   float vtx[3];
+  for (int iL = 0; iL < 6; ++iL) {
+    int good = 0,fake=0;
+    for (size_t iT = 0; iT < vtId0[iL].size(); ++iT) {
+      if (vMcl[iL][vtId0[iL][iT]] == vMcl[iL + 1][vtId1[iL][iT]]) good++;
+      else fake++;
+    }
+    cout << "\n\tLayer " << iL << ": fakes " << double(fake) / vtId0[iL].size();
+    cout << ", goods: " << double(good) / vtId0[iL].size() << endl;
+  }
+
+  int good = 0;
+  int fake = 0;
+  for (int iT = 0; iT < vtId0[1].size(); ++iT) {
+    if (vcid0[1][iT] >= 0 && vcid1[1][iT] >= 0) {
+      int idx = vcid0[1][iT];
+      if (vMcl[0][vtId0[0][idx]] == vMcl[1][vtId1[0][idx]]) good++;
+      else fake++;
+    }
+  }
+  cout << "\n\tValidated tracklets: fakes " << fake;
+  cout << ", goods: " << good<< endl;
   // computeVertex(vtx);
   return 0;
 }
 
 void computeVertex(int* id0, int* id1, int lenIds,  // Trusted cluster id on layer 0,1
-                int* lut0, int* lut1,               // LUTs layer0, layer1
-                float* x0, float* y0, float* z0,    // Clusters layer0
-                float* x1, float* y1, float* z1,    // Clusters layer1
-                float* final_vertex                 // Vertex array
-               )
+    int* lut0, int* lut1,               // LUTs layer0, layer1
+    float* x0, float* y0, float* z0,    // Clusters layer0
+    float* x1, float* y1, float* z1,    // Clusters layer1
+    float* final_vertex                 // Vertex array
+    )
 {
   int threads = 1;
 
   VertexCandidate vtxcand;
-  #pragma omp parallel
+#pragma omp parallel
   {
     threads = omp_get_num_threads();
     int tid = omp_get_thread_num();
     int n = 0;
     VertexCandidate candidate;
-    #pragma omp for
+#pragma omp for
     for ( int id = 0; id < lenIds; ++id ) {
       /// Reconstruct line from data
       Line l;
@@ -303,7 +329,7 @@ void computeVertex(int* id0, int* id1, int lenIds,  // Trusted cluster id on lay
       l.c[2] = z1[lut1[id1[id]]] - z0[lut0[id0[id]]];
       candidate.Add(l);
     }
-    #pragma omp critical
+#pragma omp critical
     {
       vtxcand.Add(candidate);
     }
