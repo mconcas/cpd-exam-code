@@ -9,17 +9,7 @@
 #include "VertexCandidate.h"
 #include "definitions.h"
 #include "util.hpp"
-
-#ifndef _OPENCL
-#define VERSION "Serial"
-#include "Trackleter.cl"
-#include "CellFinder.cl"
-int __GID = 0;
-int __LID = 0;
-#else
 #include "cl.hpp"
-#define VERSION "OpenCL"
-#endif
 
 using std::vector;
 using std::begin;
@@ -48,7 +38,6 @@ int main(int argc, char** argv) {
     return int(phi * kInvDphi) * kNz + int((z + kZ[l]) * kInvDz[l]);
   };
 
-#ifdef _OPENCL
   /// OpenCL initialisation
   char* err_code(cl_int);
 
@@ -57,7 +46,7 @@ int main(int argc, char** argv) {
   auto devices = context.getInfo<CL_CONTEXT_DEVICES>();
   std::string s;
   devices[0].getInfo(CL_DEVICE_NAME, &s);
-  std::cout << "\n\t\t" << VERSION << " vertexer running on: " << s << std::endl << std::endl;
+  std::cout << "\n\t\tOpenCl vertexer running on: " << s << std::endl << std::endl;
 
   /// Create the Program, load and compile kernel
   cl::Program program_trackleter(context, util::loadProgram("routines/Trackleter.cl"));
@@ -103,7 +92,6 @@ int main(int argc, char** argv) {
   cl::Buffer d_tphi[6];
   cl::Buffer d_cid0[6];
   cl::Buffer d_cid1[6];
-#endif
 
   /// Loop over the vector of events
   //for ( Event& e : events ) {
@@ -157,12 +145,10 @@ int main(int argc, char** argv) {
     }
     while (tLUT.size() <= kNz * kNphi ) tLUT.push_back(size);  // Fix LUT size
 
-#ifdef _OPENCL
     d_x[iL] = cl::Buffer(context, begin(x), end(x), true);
     d_y[iL] = cl::Buffer(context, begin(y), end(y), true);
     d_z[iL] = cl::Buffer(context, begin(z), end(z), true);
     d_LUT[iL] = cl::Buffer(context, begin(tLUT), end(tLUT), true);
-#endif
   }
 
 
@@ -186,7 +172,7 @@ int main(int argc, char** argv) {
   using std::chrono::high_resolution_clock;
   using std::chrono::microseconds;
   auto t0 = high_resolution_clock::now();
-#ifdef _OPENCL
+
   try {
     for (int iL = 0; iL < 6; iL++) {
       d_tid0[iL]  = cl::Buffer(context, begin(vtId0[iL]),  end(vtId0[iL]),  false);
@@ -246,30 +232,7 @@ int main(int argc, char** argv) {
     std::cerr << "ERROR: " << err.what() << "(" << err_code(err.err()) << ")" << std::endl;
   }
   queue.finish();
-#else
-  for (int iL = 0; iL < 6; ++iL) {
-    for (__GID = 0; __GID < kNphi; ++__GID) {
-      for (__LID = 0; __LID < kGroupSize; ++__LID) {
-        Trackleter( vX[iL].data(), vY[iL].data(), vZ[iL].data(), LUT[iL].data(),
-            vX[iL+1].data(), vY[iL+1].data(), vZ[iL+1].data(), LUT[iL+1].data(),
-            vtId0[iL].data(), vtId1[iL].data(), vtphi[iL].data(), vtdzdr[iL].data(),
-            kRadii[iL+1]-kRadii[iL]);
-      }
-    }
-  }
 
-  for (int iL = 0; iL < 5; ++iL) {
-    for (__GID = 0; __GID < kNgroups; ++__GID) {
-      for (__LID = 0; __LID < kGroupSize; ++__LID) {
-        CellFinder( vtId1[iL].data(), vtphi[iL].data(), vtdzdr[iL].data(),
-            vtId0[iL+1].data(), vtphi[iL+1].data(), vtdzdr[iL+1].data(),
-            LUT[iL].data(), LUT[iL+1].data(), LUT[iL+2].data(),
-            vcid1[iL].data(), vcid0[iL+1].data());
-      }
-    }
-  }
-
-#endif
   auto t1 = high_resolution_clock::now();
   microseconds total_ms = std::chrono::duration_cast<microseconds>(t1 - t0);
   cout<<" Event: "<<e.GetId()<<" - the vertexing ran in "<<total_ms.count()<<" microseconds"<<endl;
@@ -296,7 +259,7 @@ int main(int argc, char** argv) {
     }
   }
   cout << "\n\tValidated tracklets: fakes " << fake;
-  cout << ", goods: " << good<< endl;
+  cout << ", goods: " << good;
   // computeVertex(vtx);
   return 0;
 }
@@ -337,5 +300,3 @@ void computeVertex(int* id0, int* id1, int lenIds,  // Trusted cluster id on lay
   vtxcand.ComputeClusterCentroid();
   vtxcand.GetVertex(final_vertex);
 }
-
-
