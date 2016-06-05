@@ -14,6 +14,8 @@ add_subdirectory(utils)
 add_subdirectory(vertex)
 add_executable(vertexer main.cc)
 add_executable(dryrun gauge.cc)
+add_executable(vertexer-serial serial-main.cc)
 target_link_libraries(vertexer utils event vertex ${OpenCL_LIBRARIES})
+target_link_libraries(vertexer-serial utils event vertex)
 target_link_libraries(dryrun utils event)
 

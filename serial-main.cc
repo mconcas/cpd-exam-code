@@ -4,22 +4,10 @@
 #include <stdlib.h>
 #include <chrono>
 #include <string>
-#include <omp.h>
 #include "Event.h"
 #include "VertexCandidate.h"
 #include "definitions.h"
-#include "util.hpp"
-
-// #ifndef _OPENCL
-// #define VERSION "Serial"
-// #include "Trackleter.cl"
-// #include "CellFinder.cl"
-// int __GID = 0;
-// int __LID = 0;
-// #else
-// #include "cl.hpp"
-// #define VERSION "OpenCL"
-// #endif
+#include <omp.h>
 
 using std::vector;
 using std::begin;
@@ -34,6 +22,18 @@ constexpr float kInvDz[7] = {
   0.5 * kNz / 16.333f,0.5 * kNz / 16.333f,0.5 * kNz / 16.333f,0.5 * kNz / 42.140f,
   0.5 * kNz / 42.140f,0.5 * kNz / 73.745f,0.5 * kNz / 73.745f};
 constexpr float kRadii[7] = {2.34,3.15,3.93,19.6,24.55,34.39,39.34};
+
+int get_nclusters(int* lut, int iPhi) {
+  iPhi &= (kNphi - 1);
+  return lut[(iPhi + 1) * kNz] - lut[iPhi * kNz];
+};
+
+int n_tracklets(int* lut0, int* lut1, int nphi) {
+  int n = 0;
+  for (int i = 0; i < nphi; ++i)
+    n += get_nclusters(lut0,i) * (get_nclusters(lut1,i + 1) + get_nclusters(lut1,i) + get_nclusters(lut1,i - 1));
+  return n;
+};
 
 int main(int argc, char** argv) {
   if( argv[1] == NULL ) {
@@ -57,6 +57,7 @@ int main(int argc, char** argv) {
   vector<float> vY[7];
   vector<float> vZ[7];
   vector<float> vPhi[7];
+  vector<int>   vMcl[7];
 
 
   int tot_tracklets = 0;
@@ -68,11 +69,13 @@ int main(int argc, char** argv) {
     vector<float>& y = vY[iL];
     vector<float>& z = vZ[iL];
     vector<float>& phi = vPhi[iL];
+    vector<int>&   mcl = vMcl[iL];
 
     x = e.GetLayer(iL).x;
     y = e.GetLayer(iL).y;
     z = e.GetLayer(iL).z;
     phi = e.GetLayer(iL).phi;
+    mcl = e.GetLayer(iL).mcl;
     const int size = x.size();
 
     /// Use an array of indexes to sort 4 arrays
@@ -86,6 +89,7 @@ int main(int argc, char** argv) {
       y[iC] = e.GetLayer(iL).y[idx[iC]];
       z[iC] = e.GetLayer(iL).z[idx[iC]];
       phi[iC] = e.GetLayer(iL).phi[idx[iC]];
+      mcl[iC] = e.GetLayer(iL).mcl[idx[iC]];
     }
 
     /// Fill the lookup-table
@@ -121,17 +125,29 @@ int main(int argc, char** argv) {
   auto t0 = high_resolution_clock::now();
 
   /// Loop over the layers
-  for (int iL = 0; iL < 6; iL) {
+  for (int iL = 0; iL < 6; ++iL) {
     /// Loop over the Phi granularity
-    for (int iPhi0 = 0; iPhi0 < kNphi; ++iPhi0 ) {
+    const float dr = kRadii[iL + 1] - kRadii[iL];
+    for (int iPhi0 = 0; iPhi0 < kNphi; ++iPhi0) {
       /// Loop over clusters
-      for (int iC0 = LUT[iL][iPhi * kNz]; iC0 < LUT[iL][(iPhi + 1) * kNz]; ++i) {
+      int idx_trkl = n_tracklets(LUT[iL].data(),LUT[iL+1].data(),iPhi0);
+      for (int iC0 = LUT[iL][iPhi0 * kNz]; iC0 < LUT[iL][(iPhi0 + 1) * kNz]; ++iC0) {
         /// Loop over upper layer Phi granularity
-        for (int iP1 = iPhi0 - 1 ; iP1 < iPhi0 + 2; ++iP) {
+        const float& x_0 = vX[iL][iC0];
+        const float& y_0 = vY[iL][iC0];
+        const float& z_0 = vZ[iL][iC0];
+        for (int iPhi1 = iPhi0 - 1 ; iPhi1 <= iPhi0 + 1; ++iPhi1) {
           /// Adjust index
-          iP1 &= (kNphi - 1);
-          for (int iC1 = LUT[iL + 1][iP1 * kNz] ; iC1 < LUT[iL + 1][(iP1 + 1) * kNz]) {
-
+          const int iP1 = iPhi1 & (kNphi - 1);
+          for (int iC1 = LUT[iL + 1][iP1 * kNz] ; iC1 < LUT[iL + 1][(iP1 + 1) * kNz]; ++iC1) {
+            const float& x_1 = vX[iL + 1][iC1];
+            const float& y_1 = vY[iL + 1][iC1];
+            const float& z_1 = vZ[iL + 1][iC1];
+            vtId0[iL][idx_trkl]  = iC0;
+            vtId1[iL][idx_trkl]  = iC1;
+            vtdzdr[iL][idx_trkl] = (z_1 - z_0) / dr;
+            vtphi[iL][idx_trkl] = atan2(y_1 - y_0,x_1 - x_0) + kPi;
+            idx_trkl++;
           }
         }
       }
@@ -141,6 +157,28 @@ int main(int argc, char** argv) {
   microseconds total_ms = std::chrono::duration_cast<microseconds>(t1 - t0);
   cout<<" Event: "<<e.GetId()<<" - the vertexing ran in "<<total_ms.count()<<" microseconds"<<endl;
 
+  for (int iL = 0; iL < 6; ++iL) {
+    int good = 0,fake=0;
+    for (size_t iT = 0; iT < vtId0[iL].size(); ++iT) {
+      if (vMcl[iL][vtId0[iL][iT]] == vMcl[iL + 1][vtId1[iL][iT]]) good++;
+      else fake++;
+    }
+    cout << "\n\tLayer " << iL << ": fakes " << double(fake) / vtId0[iL].size();
+    cout << ", goods: " << double(good) / vtId0[iL].size() << endl;
+  }
+
+ /* int good = 0;
+  int fake = 0;
+  for (int iT = 0; iT < vtId0[1].size(); ++iT) {
+    if (vcid0[1][iT] >= 0 && vcid1[1][iT] >= 0) {
+      int idx = vcid0[1][iT];
+      if (vMcl[0][vtId0[0][idx]] == vMcl[1][vtId1[0][idx]]) good++;
+      else fake++;
+    }
+  }
+  cout << "\n\tValidated tracklets: fakes " << fake;
+  cout << ", goods: " << good<< endl;*/
+
   /// Vertex Finding and comparison
   float vtx[3];
   // computeVertex(vtx);
@@ -148,22 +186,22 @@ int main(int argc, char** argv) {
 }
 
 void computeVertex(int* id0, int* id1, int lenIds,  // Trusted cluster id on layer 0,1
-                int* lut0, int* lut1,               // LUTs layer0, layer1
-                float* x0, float* y0, float* z0,    // Clusters layer0
-                float* x1, float* y1, float* z1,    // Clusters layer1
-                float* final_vertex                 // Vertex array
-               )
+    int* lut0, int* lut1,               // LUTs layer0, layer1
+    float* x0, float* y0, float* z0,    // Clusters layer0
+    float* x1, float* y1, float* z1,    // Clusters layer1
+    float* final_vertex                 // Vertex array
+    )
 {
   int threads = 1;
 
   VertexCandidate vtxcand;
-  #pragma omp parallel
+#pragma omp parallel
   {
     threads = omp_get_num_threads();
     int tid = omp_get_thread_num();
     int n = 0;
     VertexCandidate candidate;
-    #pragma omp for
+#pragma omp for
     for ( int id = 0; id < lenIds; ++id ) {
       /// Reconstruct line from data
       Line l;
@@ -175,7 +213,7 @@ void computeVertex(int* id0, int* id1, int lenIds,  // Trusted cluster id on lay
       l.c[2] = z1[lut1[id1[id]]] - z0[lut0[id0[id]]];
       candidate.Add(l);
     }
-    #pragma omp critical
+#pragma omp critical
     {
       vtxcand.Add(candidate);
     }
