@@ -1,44 +1,64 @@
 #include "definitions.h"
 
-int get_nclusters_phi(__global int* restrict lut, int iPhi) {
+int GetNumberOfClustersPhi(__global int* restrict lut, int iPhi) {
     iPhi &= (kNphi - 1);
     return lut[(iPhi + 1) * kNz] - lut[iPhi * kNz];
 };
 
-int get_nclusters_phi_z(__global int* restrict lut, int iPhi, int iZ) {
+int GetNumberOfClustersPhiZ(__global int* restrict lut, int iPhi, int iZ) {
     iPhi &= (kNphi - 1);
     return lut[iPhi * kNz + iZ + 1] - lut[iPhi * kNz + iZ];
 };
 
-int n_tracklets_local(__global int* restrict lut0, __global int* restrict lut1, int nphi) {
-    int n = 0;
-    for (int i = 0; i < nphi; ++i)
-        n += get_nclusters_phi(lut0,i) * (get_nclusters_phi(lut1,i + 1) + get_nclusters_phi(lut1,i) + get_nclusters_phi(lut1,i - 1));
-    return n;
+int GetNumberOfClustersBin(__global int* restrict lut, int idx) {
+    return lut[idx + 1] - lut[idx];
 };
 
-int n_tracklet_phi_z(__global int* restrict lut0, __global int* restrict lut1, int nphi0, int nz0) {
-    int n = n_tracklets_local(lut0,lut1,nphi0);
-
-    int mult = (get_nclusters_phi(lut1,nphi0 + 1) + get_nclusters_phi(lut1,nphi0) + get_nclusters_phi(lut1,nphi0 - 1));
-    for (int iZ0 = 0; iZ0 < nz0; ++iZ0) {
-        n += get_nclusters_phi_z(lut0,nphi0,iZ0) * mult;
+int FirstTrackletForTheBinOnLayer0(__global int* restrict lut0, __global int* restrict lut1, int binidx) {
+    int n = 0;
+    for (int i = 0; i < binidx; ++i) {
+        const int iPhi = binidx / kNphi;
+        n += GetNumberOfClustersBin(lut0, i) * (GetNumberOfClustersPhi(lut1,iPhi - 1) + \
+                GetNumberOfClustersPhi(lut1, iPhi) + GetNumberOfClustersPhi(lut1, iPhi + 1));
     }
     return n;
 };
 
+void PopulateCoarseLUT(int* coarseLUT, __global int* lut0, __global int* lut1) {
+    coarseLUT[0] = 0;
+    for (int iPhi = 0; iPhi < kNphi; ++iPhi) {
+        const int mult = GetNumberOfClustersPhi(lut1, iPhi - 1) + \
+                         GetNumberOfClustersPhi(lut1, iPhi) + \
+                         GetNumberOfClustersPhi(lut1, iPhi + 1);
+        for (int bin = kNz * iPhi + 1; bin < kNz * (iPhi + 1) + 1; ++bin) {
+           coarseLUT[bin] = coarseLUT[bin - 1] + mult * GetNumberOfClustersBin(lut0, bin);
+        }
+    }
+};
+
+int FirstTrackletForTheBinOnLayer1(__global int* restrict lut0, __global int* restrict lut1, int phi0, int z0, int phi1, int z1) {
+    int n = 0;
+    const int numberOfClustersInBin0 = GetNumberOfClustersBin(lut0, (phi0 * kNz) + z0);
+    for (int iPhi0 = phi0 - 1; iPhi0 < phi1; ++iPhi0)
+        n += numberOfClustersInBin0 * GetNumberOfClustersPhi(lut1, iPhi0);
+    return n + (numberOfClustersInBin0 * GetNumberOfClustersPhiZ(lut1,phi1,z1));
+};
+
 __kernel void CellFinder(
         __global int*   restrict id1_0,
-        __global float* restrict phi0,
+        __global float* restrict tphi0,
         __global float* restrict dzdr0,
         __global int*   restrict id0_1,
-        __global float* restrict phi1,
+        __global int*   restrict id1_1,
+        __global float* restrict tphi1,
         __global float* restrict dzdr1,
         __global int*   restrict lut0,
         __global int*   restrict lut1,
         __global int*   restrict lut2,
-        __global int*   restrict neigh0,
-        __global int*   restrict neigh1
+        __global int*   restrict neigh0_1,
+        __global int*   restrict neigh1_0,
+        float r0,
+        float dr
         ) {
 
     /// Group ID: needed to search the LUT
@@ -48,38 +68,36 @@ __kernel void CellFinder(
     /// Local ID
     const int local_id = get_local_id(0);
 
-    for (int iteration = group_id * group_size; iteration < kNz * kNphi; iteration += group_size * get_num_groups(0)) {
-        const int current_phi = iteration / kNz;
-        const int current_z = iteration % kNz;
-        const int next_phi = (iteration + 1) / kNz;
-        const int next_z = (iteration + 1) % kNz;
+    int coarseLUT0[kNphi * kNz + 1];
+    int coarseLUT1[kNphi * kNz + 1];
+    PopulateCoarseLUT(coarseLUT0,lut0,lut1);
+    PopulateCoarseLUT(coarseLUT1,lut1,lut2);
 
-        const int first_tracklet = n_tracklet_phi_z(lut1,lut2,current_phi,current_z);
-        const int last_tracklet = n_tracklet_phi_z(lut1,lut2,next_phi,next_z);
-
-        for (int iT1 = first_tracklet; iT1 < last_tracklet; ++iT1) {
-            const float dzdr_1 = dzdr1[iT1];
-            const float phi_1 = phi1[iT1];
-            const int id_1  = id1_0[iT1];
-
-            for (int iPhi = current_phi - 1; iPhi <= current_phi + 1; ++iPhi) {
-                const int iPhiN = iPhi & (kNphi - 1);
-
-                int clusters_until_this_bin = 0;
-                for (int iC = current_phi + 1 - iPhi; iC > 0; iC--)
-                    clusters_until_this_bin += get_nclusters_phi(lut1,current_phi - iC);
-                clusters_until_this_bin += lut1[(iPhiN * kNz) + current_z] - lut1[iPhiN * kNz];
-
-                for (int iZ = 0; iZ < kNz; ++iZ) {
-                    const int first_assoc = n_tracklet_phi_z(lut0,lut1,iPhiN,iZ) + get_nclusters_phi_z(lut0,iPhiN,iZ) * clusters_until_this_bin;
-                    for (int iT0 = first_assoc; iT0 < first_assoc + get_nclusters_phi_z(lut0,iPhiN,iZ) * get_nclusters_phi_z(lut1,current_phi,current_z); ++iT0) {
-                        const bool flag = (id_1 == id0_1[iT0]) && (fabs(dzdr0[iT0]-dzdr_1) < kDzDrTol) && (fabs(phi_1 -phi0[iT0]) < kDphiTol || (fabs(phi_1 -phi0[iT0]) - 2 * M_PI_F) < kDphiTol);
-                        neigh0[iT0] = flag ? iT1 : -1;
-                        neigh1[iT1] = flag ? iT0 : -1;
-                    }
+    for (int bin0 = group_id; bin0 < kNz * kNphi; bin0 += get_num_groups(0)) {
+        const int phi0 = (bin0) / kNz;
+        const int z0 = (bin0) % kNz;
+        const int phi0_next = (bin0 + 1) / kNz;
+        const int z0_next = (bin0 + 1) % kNz;
+        const int t0 = coarseLUT0[bin0];
+        const int ncls0 = GetNumberOfClustersPhiZ(lut0, phi0, z0);
+        for (int bin1 = local_id; bin1 < 3 * kNz; bin1 += group_size) {
+            const int phi1 = (bin1 / kNz) + phi0 - 1;
+            const int z1 = (bin1 % kNz);
+            const int t01 = t0 + FirstTrackletForTheBinOnLayer1(lut0,lut1,phi0,z0,phi1,z1);
+            const int t01_next = t01 + ncls0 * GetNumberOfClustersPhiZ(lut1,phi1,z1);
+            const int t1 = coarseLUT1[(phi1 & (kNphi - 1)) * kNz + z1];
+            const int t1_next = coarseLUT1[(phi1 & (kNphi - 1)) * kNz + z1 + 1];
+            for (int iT01 = t01; iT01 < t01_next; ++iT01) {
+                for (int iT1 = t1; iT1 < t1_next; ++iT1) {
+                    const bool flag = (id0_1[iT01] == id1_0[iT1]) && \
+                                      (fabs(dzdr0[iT01] - dzdr1[iT1]) < kDzDrTol) && \
+                                      (fabs(tphi0[iT01] - tphi1[iT1]) < kDphiTol || fabs(tphi0[iT01] - tphi1[iT1]) - 2.f * M_PI_F < kDphiTol);
+                    neigh0_1[iT01] = flag ? iT1  : -1;
+                    neigh1_0[iT1]  = flag ? iT01 : -1;
                 }
             }
         }
+
     }
 }
 
