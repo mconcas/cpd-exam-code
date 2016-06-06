@@ -16,6 +16,7 @@ using std::begin;
 using std::end;
 using std::cout;
 using std::endl;
+using std::cerr;
 
 constexpr float kDphi = kTwoPi / kNphi;
 constexpr float kInvDphi = kNphi / kTwoPi;
@@ -29,6 +30,17 @@ int main(int argc, char** argv) {
   if( argv[1] == NULL ) {
     std::cerr<<"Please, provide a data file."<<std::endl;
     exit(EXIT_FAILURE);
+  }
+  cl_device_type DEVICE = CL_DEV_CPU;
+  
+  if( argv[2] != NULL ) {
+    if ( atoi(argv[2]) == 1 ) {
+      DEVICE = CL_DEV_CPU;
+    } else if ( atoi(argv[2]) == 2 ) 
+      DEVICE = CL_DEV_ACC;
+  } else {
+    cout<<"\n\tEmpty or invalid architecture specified, defaulting to CPU version. "<<endl;
+    cout<<"\tRun: "<<argv[0]<<" "<<argv[1]<<" [ 1 (CPU) | 2 (ACC) ] to change architecture"<<endl<<endl;
   }
 
   vector<Event> events( load_data(argv[1]) );
@@ -259,7 +271,7 @@ int main(int argc, char** argv) {
     }
   }
   cout << "\n\tValidated tracklets: fakes " << fake;
-  cout << ", goods: " << good;
+  cout << ", goods: " << good <<endl;
   // computeVertex(vtx);
   return 0;
 }

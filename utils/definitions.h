@@ -1,10 +1,5 @@
-#ifndef _OPENCL
-  #define _OPENCL
-  #ifndef DEVICE
-    #define DEVICE CL_DEVICE_TYPE_CPU
-    //#define DEVICE CL_DEVICE_TYPE_ACCELERATOR
-   #endif
-#endif
+#define CL_DEV_CPU CL_DEVICE_TYPE_CPU
+#define CL_DEV_ACC CL_DEVICE_TYPE_ACCELERATOR
 
 #ifndef UTILITIES_H
 #define UTILITIES_H
