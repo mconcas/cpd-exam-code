@@ -105,6 +105,7 @@ int main(int argc, char** argv) {
           n_avg+= (first_z1 - first_z0);
         }
       }
+      cout<<"\tTracklets from layer: "<<iLut<<" to "<<iLut+1<<": "<<n_avg << endl;
       cout<<"\tAvg. tracklets per bin from layer: "<<iLut<<" to "<<iLut+1<<": "<<n_avg/(kNz*kNphi)
         <<" | size: "<< int(n_avg /(kNz*kNphi)) * 2 * sizeof(int) * 2 * sizeof(float)<<" Bytes"<<endl;
     }
