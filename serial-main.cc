@@ -14,6 +14,7 @@ using std::begin;
 using std::end;
 using std::cout;
 using std::endl;
+using std::array;
 
 constexpr float kDphi = kTwoPi / kNphi;
 constexpr float kInvDphi = kNphi / kTwoPi;
@@ -52,6 +53,51 @@ int n_tracklet_phi_z(int* lut0, int* lut1, int nphi0, int nz0) {
     n += get_nclusters_phi_z(lut0,nphi0,iZ0) * mult;
   }
   return n;
+};
+
+int GetNumberOfClustersPhi( int*  lut, int iPhi) {
+  iPhi &= (kNphi - 1);
+  return lut[(iPhi + 1) * kNz] - lut[iPhi * kNz];
+};
+
+int GetNumberOfClustersPhiZ( int*  lut, int iPhi, int iZ) {
+  iPhi &= (kNphi - 1);
+  return lut[iPhi * kNz + iZ + 1] - lut[iPhi * kNz + iZ];
+};
+
+int GetNumberOfClustersBin( int*  lut, int idx) {
+  return lut[idx + 1] - lut[idx];
+};
+
+int FirstTrackletForTheBinOnLayer0( int*  lut0,  int*  lut1, int binidx) {
+  int n = 0;
+  for (int i = 0; i < binidx; ++i) {
+    const int iPhi = binidx / kNphi;
+    n += GetNumberOfClustersBin(lut0, i) * (GetNumberOfClustersPhi(lut1,iPhi - 1) + \
+        GetNumberOfClustersPhi(lut1, iPhi) + GetNumberOfClustersPhi(lut1, iPhi + 1));
+  }
+  return n;
+};
+
+void PopulateCoarseLUT(int* coarseLUT,  int* lut0,  int* lut1) {
+  coarseLUT[0] = 0;
+  for (int iPhi = 0; iPhi < kNphi; ++iPhi) {
+    const int mult = GetNumberOfClustersPhi(lut1, iPhi - 1) + \
+                     GetNumberOfClustersPhi(lut1, iPhi) + \
+                     GetNumberOfClustersPhi(lut1, iPhi + 1);
+    for (int bin = kNz * iPhi; bin < (iPhi + 1) * kNz; ++bin) {
+      coarseLUT[bin + 1] = coarseLUT[bin] + mult * GetNumberOfClustersBin(lut0, bin);
+    }
+  }
+};
+
+int FirstTrackletForTheBinOnLayer1( int*  lut0,  int*  lut1, int phi0, int z0, int phi1, int z1) {
+  int n = 0;
+  const int numberOfClustersInBin0 = GetNumberOfClustersBin(lut0, (phi0 * kNz) + z0);
+  for (int iPhi0 = phi0 - 1; iPhi0 < phi1; ++iPhi0)
+    n += numberOfClustersInBin0 * GetNumberOfClustersPhi(lut1, iPhi0);
+  phi1 &= (kNphi - 1);
+  return n + (numberOfClustersInBin0 * (lut1[phi1 * kNz + z1] - lut1[phi1 * kNz]));
 };
 
 int main(int argc, char** argv) {
@@ -179,64 +225,70 @@ int main(int argc, char** argv) {
     cout << "\tGood tracklets: " << m << endl;
   }
 
-  for (int iL = 0; iL < 1; ++iL) {
-    cout << "\nLayer " << iL << ", n tracklets (0,1):" << n_tracklets_phi(LUT[iL].data(),LUT[iL+1].data(),kNphi) << "," << n_tracklets_phi(LUT[iL+1].data(),LUT[iL+2].data(),kNphi) << endl;
-    const auto& lut0  = LUT[iL].data();
-    const auto& lut1  = LUT[iL+1].data();
-    const auto& lut2  = LUT[iL+2].data();
-    const auto& dzdr0 = vtdzdr[iL].data();
-    const auto& dzdr1 = vtdzdr[iL + 1].data();
-    const auto& phi0  = vtphi[iL].data();
-    const auto& phi1  = vtphi[iL + 1].data();
-    const auto& id1_0 = vtId0[iL + 1].data();
-    const auto& id1_1 = vtId1[iL + 1].data();
-    const auto& id0_1 = vtId1[iL].data();
-    auto  neigh0_1    = vcid1[iL].data();
-    auto  neigh1_0    = vcid0[iL + 1].data();
-    int n = 0;
-    for (int iteration = 0; iteration < kNz * kNphi; iteration++) {
-      //cout << iteration << "\t";
-      const int current_phi = iteration / kNz;
-      const int current_z   = iteration % kNz;
-      const int next_phi    = (iteration + 1) / kNz;
-      const int next_z      = (iteration + 1) % kNz;
+  array<array<int, kNphi * kNz +1>, 6> tLUT;
+  for (int iL = 0; iL < 6; ++iL) {
+    PopulateCoarseLUT(tLUT[iL].data(),LUT[iL].data(),LUT[iL + 1].data());
+    if (vtphi[iL].size() != tLUT[iL][kNz*kNphi])
+      cout << "Error for tracklets " << iL << ": " << vtphi[iL].size() << "\t" << tLUT[iL][kNz*kNphi] << endl;
+  }
 
-      const int first_tracklet = n_tracklet_phi_z(lut1,lut2,current_phi,current_z);
-      const int last_tracklet  = n_tracklet_phi_z(lut1,lut2,next_phi,next_z);
-      int n = 0;
-      for (int iT1 = first_tracklet; iT1 < last_tracklet; ++iT1) {
-        const float& dzdr_1 = dzdr1[iT1];
-        const float& phi_1  = phi1[iT1];
-        const int&   id10   = id1_0[iT1];
-        const int&   id11   = id1_1[iT1];
+  /*for (int i = 0; i < kNphi * kNz + 1; ++i) {
+    if (!(i%kNz)) cout << endl;
+    cout << tLUT[1][i] << "\t";
+  }
+  cout << endl;
+  */
 
-        const int zproj = clamp((int)round(((id10 % kNz) - (id11 % kNz)) * kRadii[iL] / (kRadii[iL + 1] - kRadii[iL + 2])),0,kNz - 1);
+  for (int iL = 0; iL < 5; ++iL) {
+    cout << "????? LAYER ?????" << iL << endl;
+    int*   id0_1 = vtId1[iL].data();
+    float* tphi0 = vtphi[iL].data();
+    float* dzdr0 = vtdzdr[iL].data();
+    int*   id1_0 = vtId0[iL + 1].data();
+    float* tphi1 = vtphi[iL + 1].data();
+    float* dzdr1 = vtdzdr[iL + 1].data();
+    int*   lut0 = LUT[iL].data();
+    int*   lut1 = LUT[iL + 1].data();
+    int*   lut2 = LUT[iL + 2].data();
+    int*   neigh0_1 = vcid1[iL].data();
+    int*   neigh1_0 = vcid0[iL + 1].data();
+    int* coarseLUT0 = tLUT[iL].data();
+    int* coarseLUT1 = tLUT[iL + 1].data();
 
-        for (int iPhi = current_phi - 1; iPhi <= current_phi + 1; ++iPhi) {
-          const int iPhiN = iPhi & (kNphi - 1);
+    int good = 0;
 
-          int clusters_until_this_bin = 0;
-          for (int iC = current_phi + 1 - iPhi; iC; iC--)
-            clusters_until_this_bin += get_nclusters_phi(lut1,current_phi - iC);
-          clusters_until_this_bin += lut1[(iPhiN * kNz) + current_z] - lut1[iPhiN * kNz];
-
-          for (int iZZ = 0; iZZ < kNz; ++iZZ) {
-            const int iZ = clamp(iZZ,0,kNz - 1);
-            const int first_assoc = n_tracklet_phi_z(lut0,lut1,iPhiN,iZ) + get_nclusters_phi_z(lut0,iPhiN,iZ) * clusters_until_this_bin;
-            for (int iT0 = first_assoc; iT0 < first_assoc + get_nclusters_phi_z(lut0,iPhiN,iZ) * get_nclusters_phi_z(lut1,current_phi,current_z); ++iT0) {
-              const bool flag = (id10 == id0_1[iT0]) && (fabs(dzdr0[iT0]-dzdr_1) < kDzDrTol) && ((fabs(phi_1 -phi0[iT0]) < kDphiTol) || ((fabs(phi_1 -phi0[iT0]) - (2.f * kPi)) < kDphiTol));
-              neigh0_1[iT0] = flag ? iT1 : -1;
-              neigh1_0[iT1] = flag ? iT0 : -1;
-              if (vtmc[iL][iT0] == vtmc[iL + 1][iT1]) n++;
-            }
+    for (int bin0 = 0; bin0 < kNz * kNphi; bin0++) {
+      const int phi0 = (bin0) / kNz;
+      const int z0 = (bin0) % kNz;
+      const int phi0_next = (bin0 + 1) / kNz;
+      const int z0_next = (bin0 + 1) % kNz;
+      const int t0 = coarseLUT0[bin0];
+      const int ncls0 = GetNumberOfClustersPhiZ(lut0, phi0, z0);
+      for (int bin1 = 0; bin1 < 3 * kNz; bin1++) {
+        const int phi1 = (bin1 / kNz) + phi0 - 1;
+        const int z1 = (bin1 % kNz);
+        const int t01 = t0 + FirstTrackletForTheBinOnLayer1(lut0,lut1,phi0,z0,phi1,z1);
+        const int t01_next = t01 + ncls0 * GetNumberOfClustersPhiZ(lut1,phi1,z1);
+        const int t1 = coarseLUT1[(phi1 & (kNphi - 1)) * kNz + z1];
+        const int t1_next = coarseLUT1[(phi1 & (kNphi - 1)) * kNz + z1 + 1];
+        for (int iT01 = t01; iT01 < t01_next; ++iT01) {
+          int mcLabel = -1;
+          if (vMcl[iL][vtId0[iL][iT01]] == vMcl[iL+1][vtId1[iL][iT01]]) {
+            good++;
+            mcLabel = vMcl[iL][vtId0[iL][iT01]];
+          }
+          for (int iT1 = t1; iT1 < t1_next; ++iT1) {
+            const bool flag = (id0_1[iT01] == id1_0[iT1]);
+            //                  (fabs(dzdr0[iT01] - dzdr1[iT1]) < kDzDrTol) && \
+            //                  (fabs(tphi0[iT01] - tphi1[iT1]) < kDphiTol || fabs(tphi0[iT01] - tphi1[iT1]) - kTwoPi < kDphiTol);
+            neigh0_1[iT01] = flag ? iT1  : -1;
+            neigh1_0[iT1]  = flag ? iT01 : -1;
           }
         }
       }
     }
-    cout << n << std::endl;
+    cout << "GOOOODDE " << good << endl;
   }
-
-
 
   auto t1 = high_resolution_clock::now();
   microseconds total_ms = std::chrono::duration_cast<microseconds>(t1 - t0);
