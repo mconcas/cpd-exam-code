@@ -23,15 +23,34 @@ constexpr float kInvDz[7] = {
   0.5 * kNz / 42.140f,0.5 * kNz / 73.745f,0.5 * kNz / 73.745f};
 constexpr float kRadii[7] = {2.34,3.15,3.93,19.6,24.55,34.39,39.34};
 
-int get_nclusters(int* lut, int iPhi) {
+template<typename T> T clamp(T n, T lower, T upper) {
+  return std::max(lower, std::min(n, upper));
+}
+
+int get_nclusters_phi(int* lut, int iPhi) {
   iPhi &= (kNphi - 1);
   return lut[(iPhi + 1) * kNz] - lut[iPhi * kNz];
 };
 
-int n_tracklets(int* lut0, int* lut1, int nphi) {
+int get_nclusters_phi_z(int* lut, int iPhi, int iZ) {
+  iPhi &= (kNphi - 1);
+  return lut[iPhi * kNz + iZ + 1] - lut[iPhi * kNz + iZ];
+};
+
+int n_tracklets_phi(int* lut0, int* lut1, int nphi) {
   int n = 0;
   for (int i = 0; i < nphi; ++i)
-    n += get_nclusters(lut0,i) * (get_nclusters(lut1,i + 1) + get_nclusters(lut1,i) + get_nclusters(lut1,i - 1));
+    n += get_nclusters_phi(lut0,i) * (get_nclusters_phi(lut1,i + 1) + get_nclusters_phi(lut1,i) + get_nclusters_phi(lut1,i - 1));
+  return n;
+};
+
+int n_tracklet_phi_z(int* lut0, int* lut1, int nphi0, int nz0) {
+  int n = n_tracklets_phi(lut0,lut1,nphi0);
+
+  int mult = (get_nclusters_phi(lut1,nphi0 + 1) + get_nclusters_phi(lut1,nphi0) + get_nclusters_phi(lut1,nphi0 - 1));
+  for (int iZ0 = 0; iZ0 < nz0; ++iZ0) {
+    n += get_nclusters_phi_z(lut0,nphi0,iZ0) * mult;
+  }
   return n;
 };
 
@@ -107,6 +126,7 @@ int main(int argc, char** argv) {
   vector<int>   vtId1[6];
   vector<float> vtdzdr[6];
   vector<float> vtphi[6];
+  vector<int> vtmc[6];
   vector<int> vcid0[6];
   vector<int> vcid1[6];
   for (int iL = 0; iL < 6; ++iL) {
@@ -118,6 +138,7 @@ int main(int argc, char** argv) {
     vtphi[iL].resize(ntrkls);
     vcid0[iL].resize(ntrkls);
     vcid1[iL].resize(ntrkls);
+    vtmc[iL].resize(ntrkls);
   }
 
   using std::chrono::high_resolution_clock;
@@ -128,9 +149,10 @@ int main(int argc, char** argv) {
   for (int iL = 0; iL < 6; ++iL) {
     /// Loop over the Phi granularity
     const float dr = kRadii[iL + 1] - kRadii[iL];
+    int m = 0;
     for (int iPhi0 = 0; iPhi0 < kNphi; ++iPhi0) {
       /// Loop over clusters
-      int idx_trkl = n_tracklets(LUT[iL].data(),LUT[iL+1].data(),iPhi0);
+      int idx_trkl = n_tracklets_phi(LUT[iL].data(),LUT[iL+1].data(),iPhi0);
       for (int iC0 = LUT[iL][iPhi0 * kNz]; iC0 < LUT[iL][(iPhi0 + 1) * kNz]; ++iC0) {
         /// Loop over upper layer Phi granularity
         const float& x_0 = vX[iL][iC0];
@@ -147,12 +169,75 @@ int main(int argc, char** argv) {
             vtId1[iL][idx_trkl]  = iC1;
             vtdzdr[iL][idx_trkl] = (z_1 - z_0) / dr;
             vtphi[iL][idx_trkl] = atan2(y_1 - y_0,x_1 - x_0) + kPi;
+            vtmc[iL][idx_trkl] = vMcl[iL][iC0] == vMcl[iL + 1][iC1] ? vMcl[iL][iC0] : -1;
+            if(vMcl[iL][iC0] == vMcl[iL + 1][iC1]) m++;
             idx_trkl++;
           }
         }
       }
     }
+    cout << "\tGood tracklets: " << m << endl;
   }
+
+  for (int iL = 0; iL < 1; ++iL) {
+    cout << "\nLayer " << iL << ", n tracklets (0,1):" << n_tracklets_phi(LUT[iL].data(),LUT[iL+1].data(),kNphi) << "," << n_tracklets_phi(LUT[iL+1].data(),LUT[iL+2].data(),kNphi) << endl;
+    const auto& lut0  = LUT[iL].data();
+    const auto& lut1  = LUT[iL+1].data();
+    const auto& lut2  = LUT[iL+2].data();
+    const auto& dzdr0 = vtdzdr[iL].data();
+    const auto& dzdr1 = vtdzdr[iL + 1].data();
+    const auto& phi0  = vtphi[iL].data();
+    const auto& phi1  = vtphi[iL + 1].data();
+    const auto& id1_0 = vtId0[iL + 1].data();
+    const auto& id1_1 = vtId1[iL + 1].data();
+    const auto& id0_1 = vtId1[iL].data();
+    auto  neigh0_1    = vcid1[iL].data();
+    auto  neigh1_0    = vcid0[iL + 1].data();
+    int n = 0;
+    for (int iteration = 0; iteration < kNz * kNphi; iteration++) {
+      //cout << iteration << "\t";
+      const int current_phi = iteration / kNz;
+      const int current_z   = iteration % kNz;
+      const int next_phi    = (iteration + 1) / kNz;
+      const int next_z      = (iteration + 1) % kNz;
+
+      const int first_tracklet = n_tracklet_phi_z(lut1,lut2,current_phi,current_z);
+      const int last_tracklet  = n_tracklet_phi_z(lut1,lut2,next_phi,next_z);
+      int n = 0;
+      for (int iT1 = first_tracklet; iT1 < last_tracklet; ++iT1) {
+        const float& dzdr_1 = dzdr1[iT1];
+        const float& phi_1  = phi1[iT1];
+        const int&   id10   = id1_0[iT1];
+        const int&   id11   = id1_1[iT1];
+
+        const int zproj = clamp((int)round(((id10 % kNz) - (id11 % kNz)) * kRadii[iL] / (kRadii[iL + 1] - kRadii[iL + 2])),0,kNz - 1);
+
+        for (int iPhi = current_phi - 1; iPhi <= current_phi + 1; ++iPhi) {
+          const int iPhiN = iPhi & (kNphi - 1);
+
+          int clusters_until_this_bin = 0;
+          for (int iC = current_phi + 1 - iPhi; iC; iC--)
+            clusters_until_this_bin += get_nclusters_phi(lut1,current_phi - iC);
+          clusters_until_this_bin += lut1[(iPhiN * kNz) + current_z] - lut1[iPhiN * kNz];
+
+          for (int iZZ = 0; iZZ < kNz; ++iZZ) {
+            const int iZ = clamp(iZZ,0,kNz - 1);
+            const int first_assoc = n_tracklet_phi_z(lut0,lut1,iPhiN,iZ) + get_nclusters_phi_z(lut0,iPhiN,iZ) * clusters_until_this_bin;
+            for (int iT0 = first_assoc; iT0 < first_assoc + get_nclusters_phi_z(lut0,iPhiN,iZ) * get_nclusters_phi_z(lut1,current_phi,current_z); ++iT0) {
+              const bool flag = (id10 == id0_1[iT0]) && (fabs(dzdr0[iT0]-dzdr_1) < kDzDrTol) && ((fabs(phi_1 -phi0[iT0]) < kDphiTol) || ((fabs(phi_1 -phi0[iT0]) - (2.f * kPi)) < kDphiTol));
+              neigh0_1[iT0] = flag ? iT1 : -1;
+              neigh1_0[iT1] = flag ? iT0 : -1;
+              if (vtmc[iL][iT0] == vtmc[iL + 1][iT1]) n++;
+            }
+          }
+        }
+      }
+    }
+    cout << n << std::endl;
+  }
+
+
+
   auto t1 = high_resolution_clock::now();
   microseconds total_ms = std::chrono::duration_cast<microseconds>(t1 - t0);
   cout<<" Event: "<<e.GetId()<<" - the vertexing ran in "<<total_ms.count()<<" microseconds"<<endl;
@@ -167,7 +252,7 @@ int main(int argc, char** argv) {
     cout << ", goods: " << double(good) / vtId0[iL].size() << endl;
   }
 
- /* int good = 0;
+  int good = 0;
   int fake = 0;
   for (int iT = 0; iT < vtId0[1].size(); ++iT) {
     if (vcid0[1][iT] >= 0 && vcid1[1][iT] >= 0) {
@@ -177,7 +262,7 @@ int main(int argc, char** argv) {
     }
   }
   cout << "\n\tValidated tracklets: fakes " << fake;
-  cout << ", goods: " << good<< endl;*/
+  cout << ", goods: " << good<< endl;
 
   /// Vertex Finding and comparison
   float vtx[3];
