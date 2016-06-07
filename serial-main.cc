@@ -327,7 +327,7 @@ int main(int argc, char** argv) {
 
           int mcLabel = -1;
           if (vMcl[iL][vtId0[iL][iT01]] == vMcl[iL+1][vtId1[iL][iT01]]) {
-            mcLabel = vMcl[iL][vtId0[iL+1][iT01]];
+            mcLabel = vMcl[iL][vtId0[iL][iT01]];
           }
           int val = 0;
 
