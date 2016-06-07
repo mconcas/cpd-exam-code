@@ -8,6 +8,7 @@
 #include "VertexCandidate.h"
 #include "definitions.h"
 #include <omp.h>
+#include <fstream>
 
 using std::vector;
 using std::begin;
@@ -15,6 +16,7 @@ using std::end;
 using std::cout;
 using std::endl;
 using std::array;
+using std::ios;
 
 constexpr float kDphi = kTwoPi / kNphi;
 constexpr float kInvDphi = kNphi / kTwoPi;
@@ -85,9 +87,8 @@ void PopulateCoarseLUT(int* coarseLUT,  int* lut0,  int* lut1) {
     const int mult = GetNumberOfClustersPhi(lut1, iPhi - 1) + \
                      GetNumberOfClustersPhi(lut1, iPhi) + \
                      GetNumberOfClustersPhi(lut1, iPhi + 1);
-    for (int bin = kNz * iPhi; bin < (iPhi + 1) * kNz; ++bin) {
+    for (int bin = kNz * iPhi; bin < (iPhi + 1) * kNz; ++bin)
       coarseLUT[bin + 1] = coarseLUT[bin] + mult * GetNumberOfClustersBin(lut0, bin);
-    }
   }
 };
 
@@ -99,6 +100,13 @@ int FirstTrackletForTheBinOnLayer1( int*  lut0,  int*  lut1, int phi0, int z0, i
   phi1 &= (kNphi - 1);
   return n + (numberOfClustersInBin0 * (lut1[phi1 * kNz + z1] - lut1[phi1 * kNz]));
 };
+
+int GoodTracklet(int *mc0, int *mc1, int *cls0, int *cls1, int iD) {
+  if (mc0[cls0[iD]] == mc1[cls1[iD]] && mc0[cls0[iD]] > -1)
+    return mc0[cls0[iD]];
+  else
+    return -1;
+}
 
 int main(int argc, char** argv) {
   if( argv[1] == NULL ) {
@@ -182,9 +190,16 @@ int main(int argc, char** argv) {
     vtId1[iL].resize(ntrkls);
     vtdzdr[iL].resize(ntrkls);
     vtphi[iL].resize(ntrkls);
-    vcid0[iL].resize(ntrkls);
-    vcid1[iL].resize(ntrkls);
+    vcid0[iL].resize(ntrkls, -1);
+    vcid1[iL].resize(ntrkls, -1);
     vtmc[iL].resize(ntrkls);
+  }
+
+  array<array<int, kNphi * kNz +1>, 6> tLUT;
+  for (int iL = 0; iL < 6; ++iL) {
+    PopulateCoarseLUT(tLUT[iL].data(),LUT[iL].data(),LUT[iL + 1].data());
+    if (vtphi[iL].size() != tLUT[iL][kNz*kNphi])
+      cout << "Error for tracklets " << iL << ": " << vtphi[iL].size() << "\t" << tLUT[iL][kNz*kNphi] << endl;
   }
 
   using std::chrono::high_resolution_clock;
@@ -198,49 +213,61 @@ int main(int argc, char** argv) {
     int m = 0;
     for (int iPhi0 = 0; iPhi0 < kNphi; ++iPhi0) {
       /// Loop over clusters
-      int idx_trkl = n_tracklets_phi(LUT[iL].data(),LUT[iL+1].data(),iPhi0);
-      for (int iC0 = LUT[iL][iPhi0 * kNz]; iC0 < LUT[iL][(iPhi0 + 1) * kNz]; ++iC0) {
-        /// Loop over upper layer Phi granularity
-        const float& x_0 = vX[iL][iC0];
-        const float& y_0 = vY[iL][iC0];
-        const float& z_0 = vZ[iL][iC0];
+      for (int iZ0 = 0; iZ0 < kNz; ++iZ0) {
+        const int cls0 = GetNumberOfClustersPhiZ(LUT[iL].data(),iPhi0,iZ0);
+        int offset = tLUT[iL][iPhi0 * kNz + iZ0];
         for (int iPhi1 = iPhi0 - 1 ; iPhi1 <= iPhi0 + 1; ++iPhi1) {
-          /// Adjust index
-          const int iP1 = iPhi1 & (kNphi - 1);
-          for (int iC1 = LUT[iL + 1][iP1 * kNz] ; iC1 < LUT[iL + 1][(iP1 + 1) * kNz]; ++iC1) {
-            const float& x_1 = vX[iL + 1][iC1];
-            const float& y_1 = vY[iL + 1][iC1];
-            const float& z_1 = vZ[iL + 1][iC1];
-            vtId0[iL][idx_trkl]  = iC0;
-            vtId1[iL][idx_trkl]  = iC1;
-            vtdzdr[iL][idx_trkl] = (z_1 - z_0) / dr;
-            vtphi[iL][idx_trkl] = atan2(y_1 - y_0,x_1 - x_0) + kPi;
-            vtmc[iL][idx_trkl] = vMcl[iL][iC0] == vMcl[iL + 1][iC1] ? vMcl[iL][iC0] : -1;
-            if(vMcl[iL][iC0] == vMcl[iL + 1][iC1]) m++;
-            idx_trkl++;
+          const int iP1 = iPhi1 & (kNphi - 1); /// Adjust index
+          for (int iZ1 = 0; iZ1 < kNz; ++iZ1) {
+            const int cls1 = GetNumberOfClustersPhiZ(LUT[iL + 1].data(),iP1,iZ1);
+            for (int iC0 = LUT[iL][iPhi0 * kNz + iZ0]; iC0 < LUT[iL][iPhi0 * kNz + iZ0 + 1]; ++iC0) {
+              /// Loop over upper layer Phi granularity
+              const int iC0_norm = (iC0 - LUT[iL][iPhi0 * kNz + iZ0]);
+              const float& x_0 = vX[iL][iC0];
+              const float& y_0 = vY[iL][iC0];
+              const float& z_0 = vZ[iL][iC0];
+              int idx_trkl = (iC0_norm * cls1) + offset;
+              for (int iC1 = LUT[iL + 1][iP1 * kNz + iZ1] ; iC1 < LUT[iL + 1][iP1 * kNz + iZ1 + 1]; ++iC1) {
+                const float& x_1 = vX[iL + 1][iC1];
+                const float& y_1 = vY[iL + 1][iC1];
+                const float& z_1 = vZ[iL + 1][iC1];
+                vtId0[iL][idx_trkl]  = iC0;
+                vtId1[iL][idx_trkl]  = iC1;
+                vtdzdr[iL][idx_trkl] = (z_1 - z_0) / dr;
+                vtphi[iL][idx_trkl] = atan2(y_1 - y_0,x_1 - x_0) + kPi;
+                vtmc[iL][idx_trkl] = vMcl[iL][iC0] == vMcl[iL + 1][iC1] ? vMcl[iL][iC0] : -1;
+                if (vMcl[iL][iC0] == vMcl[iL + 1][iC1]) m++;
+                if (idx_trkl >= tLUT[iL][iPhi0 * kNz + iZ0 + 1]) cout << "ROVAGNATI" << endl;
+                idx_trkl++;
+              }
+            }
+            offset += cls1 * cls0;
           }
         }
       }
     }
-    cout << "\tGood tracklets: " << m << endl;
+    cout << "\t" << m << " good tracklets out of " << vtphi[iL].size() << endl;
   }
 
-  array<array<int, kNphi * kNz +1>, 6> tLUT;
+  std::ofstream myfile("/tmp/serial.txt",ios::out);
   for (int iL = 0; iL < 6; ++iL) {
-    PopulateCoarseLUT(tLUT[iL].data(),LUT[iL].data(),LUT[iL + 1].data());
-    if (vtphi[iL].size() != tLUT[iL][kNz*kNphi])
-      cout << "Error for tracklets " << iL << ": " << vtphi[iL].size() << "\t" << tLUT[iL][kNz*kNphi] << endl;
+    for (int iT = 0; iT < vtId0[iL].size(); ++iT)
+      myfile << vtId0[iL][iT] << "\t" << vtId1[iL][iT] << "\n";
+    myfile << endl;
   }
+  myfile.close();
+
 
   /*for (int i = 0; i < kNphi * kNz + 1; ++i) {
     if (!(i%kNz)) cout << endl;
     cout << tLUT[1][i] << "\t";
-  }
-  cout << endl;
-  */
+    }
+    cout << endl;
+    */
+  vector<float> dzdr[2];
+  vector<float> dphi[2];
 
   for (int iL = 0; iL < 5; ++iL) {
-    cout << "????? LAYER ?????" << iL << endl;
     int*   id0_1 = vtId1[iL].data();
     float* tphi0 = vtphi[iL].data();
     float* dzdr0 = vtdzdr[iL].data();
@@ -256,6 +283,10 @@ int main(int argc, char** argv) {
     int* coarseLUT1 = tLUT[iL + 1].data();
 
     int good = 0;
+    int bad_CoarseLUT0[2] = {0,0};
+    int bad_Projection0[2] = {0,0};
+    int fineLUTmismatch = 0;
+    cout << "CoarseLUT" << iL << " limits: " << coarseLUT0[0] << ", " << coarseLUT0[kNz * kNphi] << endl;
 
     for (int bin0 = 0; bin0 < kNz * kNphi; bin0++) {
       const int phi0 = (bin0) / kNz;
@@ -264,35 +295,88 @@ int main(int argc, char** argv) {
       const int z0_next = (bin0 + 1) % kNz;
       const int t0 = coarseLUT0[bin0];
       const int ncls0 = GetNumberOfClustersPhiZ(lut0, phi0, z0);
+
+      if (coarseLUT0[bin0] != coarseLUT0[bin0+1]) {
+        if (vtId0[iL][coarseLUT0[bin0]] < lut0[bin0])
+          bad_CoarseLUT0[0]++;
+        if (vtId0[iL][coarseLUT0[bin0 + 1]-1] >= lut0[bin0 + 1])
+          bad_CoarseLUT0[1]++;
+      }
+
       for (int bin1 = 0; bin1 < 3 * kNz; bin1++) {
         const int phi1 = (bin1 / kNz) + phi0 - 1;
         const int z1 = (bin1 % kNz);
         const int t01 = t0 + FirstTrackletForTheBinOnLayer1(lut0,lut1,phi0,z0,phi1,z1);
         const int t01_next = t01 + ncls0 * GetNumberOfClustersPhiZ(lut1,phi1,z1);
+
+        const int phi1_next = ((bin1+1) / kNz) + phi0 - 1;
+        const int z1_next = ((bin1+1) % kNz);
+        if (t01_next - t0 != FirstTrackletForTheBinOnLayer1(lut0,lut1,phi0,z0,phi1_next,z1_next))
+          fineLUTmismatch++;
+
+        if (t01 != t01_next) {
+          if (vtId1[iL][t01] < lut1[(phi1 & (kNphi - 1)) * kNz + z1])
+            bad_Projection0[0]++;
+          if (vtId1[iL][t01_next - 1] >= lut1[(phi1 & (kNphi - 1)) * kNz + z1 + 1])
+            bad_Projection0[1]++;
+        }
+
         const int t1 = coarseLUT1[(phi1 & (kNphi - 1)) * kNz + z1];
         const int t1_next = coarseLUT1[(phi1 & (kNphi - 1)) * kNz + z1 + 1];
         for (int iT01 = t01; iT01 < t01_next; ++iT01) {
+
           int mcLabel = -1;
           if (vMcl[iL][vtId0[iL][iT01]] == vMcl[iL+1][vtId1[iL][iT01]]) {
-            good++;
-            mcLabel = vMcl[iL][vtId0[iL][iT01]];
+            mcLabel = vMcl[iL][vtId0[iL+1][iT01]];
           }
+          int val = 0;
+
           for (int iT1 = t1; iT1 < t1_next; ++iT1) {
-            const bool flag = (id0_1[iT01] == id1_0[iT1]);
-            //                  (fabs(dzdr0[iT01] - dzdr1[iT1]) < kDzDrTol) && \
-            //                  (fabs(tphi0[iT01] - tphi1[iT1]) < kDphiTol || fabs(tphi0[iT01] - tphi1[iT1]) - kTwoPi < kDphiTol);
-            neigh0_1[iT01] = flag ? iT1  : -1;
-            neigh1_0[iT1]  = flag ? iT01 : -1;
+            const bool flag = (id0_1[iT01] == id1_0[iT1]) && \
+                              (fabs(dzdr0[iT01] - dzdr1[iT1]) < kDzDrTol) && \
+                              (fabs(tphi0[iT01] - tphi1[iT1]) < kDphiTol);
+            if (flag) {
+              if (mcLabel > 0 && !val) val = 1;
+              if (mcLabel > 0 && vMcl[iL + 1][vtId0[iL + 1][iT1]] == vMcl[iL + 2][vtId1[iL + 1][iT1]] && \
+                  vMcl[iL + 1][vtId0[iL + 1][iT1]] == mcLabel) {
+                dzdr[0].push_back(fabs(dzdr0[iT01] - dzdr1[iT1]));
+                dphi[0].push_back(fabs(tphi0[iT01] - tphi1[iT1]));
+              } else {
+                dzdr[1].push_back(fabs(dzdr0[iT01] - dzdr1[iT1]));
+                dphi[1].push_back(fabs(tphi0[iT01] - tphi1[iT1]));
+              }
+              neigh0_1[iT01] = iT1;
+              neigh1_0[iT1]  = iT01;
+            }
           }
+
+          good += val;
+
         }
       }
     }
-    cout << "GOOOODDE " << good << endl;
+    cout << "GOOD " << good << endl;
+    if (bad_CoarseLUT0[0] || bad_CoarseLUT0[1]) cout << "BAD CoarseLUT" << iL << " " << bad_CoarseLUT0[0] << "\t" << bad_CoarseLUT0[1] << endl;
+    if (bad_Projection0[0] || bad_Projection0[1]) cout << "BAD Projection0 on layer " << iL << " " << bad_Projection0[0] << "\t" << bad_Projection0[1] << endl;
+    if (fineLUTmismatch) cout << "FineLUT mismatch on layer " << iL << " " << fineLUTmismatch << endl;
   }
 
   auto t1 = high_resolution_clock::now();
   microseconds total_ms = std::chrono::duration_cast<microseconds>(t1 - t0);
   cout<<" Event: "<<e.GetId()<<" - the vertexing ran in "<<total_ms.count()<<" microseconds"<<endl;
+
+  std::string name[2] = {"G","B"};
+  std::string namedeltadzdr = ("/tmp/deltadzdr");
+  std::string namedeltaphi = ("/tmp/deltaphi");
+
+  for (int i = 0; i < 2; ++i) {
+    std::ofstream dzdrf((namedeltadzdr + name[i]).data());
+    for (auto &v : dzdr[i]) dzdrf << v << "\n";
+    dzdrf.close();
+    std::ofstream dphif((namedeltaphi + name[i]).data());
+    for (auto &v : dphi[i]) dphif << v << "\n";
+    dphif.close();
+  }
 
   for (int iL = 0; iL < 6; ++iL) {
     int good = 0,fake=0;
@@ -306,11 +390,16 @@ int main(int argc, char** argv) {
 
   int good = 0;
   int fake = 0;
-  for (int iT = 0; iT < vtId0[1].size(); ++iT) {
-    if (vcid0[1][iT] >= 0 && vcid1[1][iT] >= 0) {
-      int idx = vcid0[1][iT];
-      if (vMcl[0][vtId0[0][idx]] == vMcl[1][vtId1[0][idx]]) good++;
-      else fake++;
+  for (int iT = 0; iT < vtId0[0].size(); ++iT) {
+    int assoc_id = vcid1[0][iT];
+    if (assoc_id > -1) {
+      if (vcid0[1][assoc_id] > -1 && vcid1[1][assoc_id] > -1) {
+        if (GoodTracklet(vMcl[0].data(), vMcl[1].data(), vtId0[0].data(), vtId1[0].data(), iT) > -1) {
+          good++;
+        } else {
+          fake++;
+        }
+      }
     }
   }
   cout << "\n\tValidated tracklets: fakes " << fake;
