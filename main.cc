@@ -28,6 +28,26 @@ constexpr float kInvDz[7] = {
   0.5 * kNz / 42.140f,0.5 * kNz / 73.745f,0.5 * kNz / 73.745f};
 constexpr float kRadii[7] = {2.34,3.15,3.93,19.6,24.55,34.39,39.34};
 
+int GetNumberOfClustersPhi( int*  lut, int iPhi) {
+  iPhi &= (kNphi - 1);
+  return lut[(iPhi + 1) * kNz] - lut[iPhi * kNz];
+};
+
+int GetNumberOfClustersBin( int*  lut, int idx) {
+  return lut[idx + 1] - lut[idx];
+};
+
+void PopulateCoarseLUT(int* coarseLUT,  int* lut0,  int* lut1) {
+  coarseLUT[0] = 0;
+  for (int iPhi = 0; iPhi < kNphi; ++iPhi) {
+    const int mult = GetNumberOfClustersPhi(lut1, iPhi - 1) + \
+                     GetNumberOfClustersPhi(lut1, iPhi) + \
+                     GetNumberOfClustersPhi(lut1, iPhi + 1);
+    for (int bin = kNz * iPhi; bin < (iPhi + 1) * kNz; ++bin)
+      coarseLUT[bin + 1] = coarseLUT[bin] + mult * GetNumberOfClustersBin(lut0, bin);
+  }
+};
+
 int main(int argc, char** argv) {
   if( argv[1] == NULL ) {
     std::cerr<<"Please, provide a data file."<<std::endl;
@@ -91,7 +111,7 @@ int main(int argc, char** argv) {
 
   /// Create kernel function
   auto Trackleter = cl::make_kernel<cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,
-       cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer, float>(program_trackleter, "Trackleter");
+       cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer, float>(program_trackleter, "Trackleter");
   auto CellFinder = cl::make_kernel<cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,
        cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer>(program_cellfinder, "CellFinder");
 
@@ -105,6 +125,7 @@ int main(int argc, char** argv) {
   cl::Buffer d_tphi[6];
   cl::Buffer d_cid0[6];
   cl::Buffer d_cid1[6];
+  cl::Buffer d_CoarseLUT[6];
 
   /// Loop over the vector of events
   //for ( Event& e : events ) {
@@ -178,6 +199,11 @@ int main(int argc, char** argv) {
     vcid1[iL].resize(ntrkls,-1);
   }
 
+  array<array<int, kNphi * kNz +1>, 6> tLUT;
+  for (int iL = 0; iL < 6; ++iL) {
+    PopulateCoarseLUT(tLUT[iL].data(),LUT[iL].data(),LUT[iL + 1].data());
+  }
+
   using std::chrono::high_resolution_clock;
   using std::chrono::microseconds;
   auto t0 = high_resolution_clock::now();
@@ -188,6 +214,7 @@ int main(int argc, char** argv) {
       d_tid1[iL]  = cl::Buffer(context, begin(vtId1[iL]),  end(vtId1[iL]),  false);
       d_tdzdr[iL] = cl::Buffer(context, begin(vtdzdr[iL]), end(vtdzdr[iL]), false);
       d_tphi[iL]  = cl::Buffer(context, begin(vtphi[iL]),  end(vtphi[iL]),  false);
+      d_CoarseLUT[iL] = cl::Buffer(context, tLUT[iL].begin(), tLUT[iL].end(), true);
 
       Trackleter(
           cl::EnqueueArgs(queue,cl::NDRange(kNphi * kGroupSize), cl::NDRange(kGroupSize)),
@@ -199,6 +226,7 @@ int main(int argc, char** argv) {
           d_y[iL+1],
           d_z[iL+1],
           d_LUT[iL+1],
+          d_CoarseLUT[iL],
           d_tid0[iL],
           d_tid1[iL],
           d_tphi[iL],
@@ -226,7 +254,7 @@ int main(int argc, char** argv) {
   }
   myfile.close();
 
-  try {
+  /*try {
     for (int iL = 0; iL < 5; ++iL) {
       CellFinder(
           cl::EnqueueArgs(queue,cl::NDRange(kNphi * kGroupSize), cl::NDRange(kGroupSize)),
@@ -247,7 +275,7 @@ int main(int argc, char** argv) {
   } catch (cl::Error err) {
     std::cout << "Exception during the CellFinder execution.\n";
     std::cerr << "ERROR: " << err.what() << "(" << err_code(err.err()) << ")" << std::endl;
-  }
+  }*/
   queue.finish();
 
   auto t1 = high_resolution_clock::now();

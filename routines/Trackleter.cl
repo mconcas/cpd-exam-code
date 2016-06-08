@@ -1,17 +1,9 @@
 #include "definitions.h"
 
-int get_nclusters(__global int* lut, int iPhi) {
-    iPhi &= (kNphi - 1);
-    return lut[(iPhi + 1) * kNz] - lut[iPhi * kNz];
+int GetNumberOfClustersPhiZ(__global int*  lut, int iPhi, int iZ) {
+  iPhi &= (kNphi - 1);
+  return lut[iPhi * kNz + iZ + 1] - lut[iPhi * kNz + iZ];
 };
-
-int n_tracklets_global(__global int* lut0, __global int* lut1, int nphi) {
-    int n = 0;
-    for (int i = 0; i < nphi; ++i)
-        n += get_nclusters(lut0,i) * (get_nclusters(lut1,i + 1) + get_nclusters(lut1,i) + get_nclusters(lut1,i - 1));
-    return n;
-};
-
 
 __kernel void Trackleter(
         __global float* x0,
@@ -22,6 +14,7 @@ __kernel void Trackleter(
         __global float* y1,
         __global float* z1,
         __global int*   lut1,
+        __global int*   coarseLUT,
         __global int*   id0,
         __global int*   id1,
         __global float* phi,
@@ -34,38 +27,36 @@ __kernel void Trackleter(
     /// Local ID
     const int local_id = get_local_id(0);
 
-    for (int iteration = get_group_id(0); iteration < kNphi; iteration += get_num_groups(0)) {
-        const int first_cluster0 = lut0[iteration * kNz];
-        const int last_cluster0  = lut0[(iteration + 1) * kNz];
-
-        const int first_trkl = n_tracklets_global(lut0,lut1,iteration);
-        const int n_trkl = get_nclusters(lut1,iteration + 1) + get_nclusters(lut1,iteration) + get_nclusters(lut1,iteration - 1);
-
-        __local float x_0;
-        __local float y_0;
-        __local float z_0;
-        __local float x_1;
-        __local float y_1;
-        __local float z_1;
-
-        for (int iC0 = first_cluster0 + local_id; iC0 < last_cluster0; iC0 += group_size) {
-            x_0 = x0[iC0];
-            y_0 = y0[iC0];
-            z_0 = z0[iC0];
-            int idx_trkl = first_trkl + (iC0 - first_cluster0) * n_trkl;
-            for (int j = iteration - 1; j <= iteration + 1; ++j) {
-                const int idx = j & (kNphi - 1);
-                for (int iC1 = lut1[idx * kNz]; iC1 < lut1[(idx + 1) * kNz]; ++iC1) {
-                    x_1 = x1[iC1];
-                    y_1 = y1[iC1];
-                    z_1 = z1[iC1];
-                    id0[idx_trkl]  = iC0;
-                    id1[idx_trkl]  = iC1;
-                    dzdr[idx_trkl] = (z_1 - z_0) / dr;
-                    phi[idx_trkl] = atan2(y_1 - y_0,x_1 - x_0) + M_PI_F;
-                    idx_trkl++;
-                }
+    for (int iPhi0 = get_group_id(0); iPhi0 < kNphi; iPhi0 += get_num_groups(0)) {
+      /// Loop over clusters
+      for (int iZ0 = local_id; iZ0 < kNz; iZ0 += group_size) {
+        const int cls0 = GetNumberOfClustersPhiZ(lut0,iPhi0,iZ0);
+        int offset = coarseLUT[iPhi0 * kNz + iZ0];
+        for (int iPhi1 = iPhi0 - 1 ; iPhi1 <= iPhi0 + 1; ++iPhi1) {
+          const int iP1 = iPhi1 & (kNphi - 1); /// Adjust index
+          for (int iZ1 = 0; iZ1 < kNz; ++iZ1) {
+            const int cls1 = GetNumberOfClustersPhiZ(lut1,iP1,iZ1);
+            for (int iC0 = lut0[iPhi0 * kNz + iZ0]; iC0 < lut0[iPhi0 * kNz + iZ0 + 1]; ++iC0) {
+              /// Loop over upper layer Phi granularity
+              const int iC0_norm = (iC0 - lut0[iPhi0 * kNz + iZ0]);
+              const float x_0 = x0[iC0];
+              const float y_0 = y0[iC0];
+              const float z_0 = z0[iC0];
+              int idx_trkl = (iC0_norm * cls1) + offset;
+              for (int iC1 = lut1[iP1 * kNz + iZ1] ; iC1 < lut1[iP1 * kNz + iZ1 + 1]; ++iC1) {
+                const float x_1 = x1[iC1];
+                const float y_1 = y1[iC1];
+                const float z_1 = z1[iC1];
+                id0[idx_trkl]  = iC0;
+                id1[idx_trkl]  = iC1;
+                phi[idx_trkl] = atan2(y_1 - y_0,x_1 - x_0) + M_PI_F;
+                dzdr[idx_trkl] = (z_1 - z_0) / dr;
+                idx_trkl++;
+              }
             }
+            offset += cls1 * cls0;
+          }
         }
+      }
     }
 }
