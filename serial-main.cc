@@ -9,7 +9,6 @@
 #include "definitions.h"
 #include <omp.h>
 #include <fstream>
-#define CHECK_OUTPUT
 using std::vector;
 using std::begin;
 using std::end;
@@ -26,7 +25,7 @@ constexpr float kInvDz[7] = {
   0.5 * kNz / 42.140f,0.5 * kNz / 73.745f,0.5 * kNz / 73.745f};
 constexpr float kRadii[7] = {2.34,3.15,3.93,19.6,24.55,34.39,39.34};
 
-void ComputeVertex(int lenIds,  // Trusted cluster id on layer 0,1 
+void ComputeVertex(int lenIds,  // Trusted cluster id on layer 0,1
     float* x0, float* y0, float* z0,    // Clusters layer0
     float* x1, float* y1, float* z1,    // Clusters layer1
     float* final_vertex                 // Vertex array
@@ -214,7 +213,7 @@ int main(int argc, char** argv) {
   }
 
 #ifdef CHECK_OUTPUT
-  std::ofstream myfile("/tmp/serial.txt",ios::out);
+  std::ofstream myfile("/tmp/serial_trackleter.txt",ios::out);
   for (int iL = 0; iL < 6; ++iL) {
     for (size_t iT = 0; iT < vtId0[iL].size(); ++iT)
       myfile << vtId0[iL][iT] << "\t" << vtId1[iL][iT] << "\n";
@@ -243,6 +242,7 @@ int main(int argc, char** argv) {
       const int t0 = coarseLUT0[bin0];
       const int ncls0 = GetNumberOfClustersPhiZ(lut0, phi0, z0);
 
+#pragma omp parallel for // uncomment to parallelise
       for (int bin1 = 0; bin1 < 3 * kNz; bin1++) {
         const int phi1 = (bin1 / kNz) + phi0 - 1;
         const int z1 = (bin1 % kNz);
@@ -254,7 +254,7 @@ int main(int argc, char** argv) {
         for (int iT01 = t01; iT01 < t01_next; ++iT01) {
           for (int iT1 = t1; iT1 < t1_next; ++iT1) {
             const bool flag = (id0_1[iT01] == id1_0[iT1]) &&
-              (fabs(dzdr0[iT01] - dzdr1[iT1]) + fabs(tphi0[iT01] - tphi1[iT1]) < kDiagonalTol);
+                              (fabs(dzdr0[iT01] - dzdr1[iT1]) + fabs(tphi0[iT01] - tphi1[iT1]) < kDiagonalTol);
             // (fabs(dzdr0[iT01] - dzdr1[iT1]) < kDzDrTol) &&
             // (fabs(tphi0[iT01] - tphi1[iT1]) < kDphiTol);
             if (flag) {
@@ -271,6 +271,15 @@ int main(int argc, char** argv) {
   microseconds total_ms = std::chrono::duration_cast<microseconds>(t1 - t0);
   cout<<" Event: "<<e.GetId()<<" - the vertexing ran in "<<total_ms.count()<<" microseconds"<<endl;
 
+#ifdef CHECK_OUTPUT
+  std::ofstream myfileCF("/tmp/serial_cellfinder.txt",ios::out);
+  for (int iL = 0; iL < 6; ++iL) {
+    for (size_t iT = 0; iT < vcid0[iL].size(); ++iT)
+      myfileCF << vcid0[iL][iT] << "\t" << vcid1[iL][iT] << "\n";
+    myfileCF << endl;
+  }
+  myfileCF.close();
+#endif
 
   for (int iL = 0; iL < 6; ++iL) {
     int good = 0,fake=0;
@@ -299,7 +308,7 @@ int main(int argc, char** argv) {
           trusted_x[1].push_back(vX[1][vtId1[0][iT]]);
           trusted_y[1].push_back(vY[1][vtId1[0][iT]]);
           trusted_z[1].push_back(vZ[1][vtId1[0][iT]]);
-        } 
+        }
       }
     }
   }

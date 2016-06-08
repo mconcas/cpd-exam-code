@@ -113,7 +113,7 @@ int main(int argc, char** argv) {
   auto Trackleter = cl::make_kernel<cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,
        cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer, float>(program_trackleter, "Trackleter");
   auto CellFinder = cl::make_kernel<cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,
-       cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer>(program_cellfinder, "CellFinder");
+       cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer>(program_cellfinder, "CellFinder");
 
   cl::Buffer d_x[7];
   cl::Buffer d_y[7];
@@ -245,16 +245,21 @@ int main(int argc, char** argv) {
     std::cout << "Exception during the Trackleter execution.\n";
     std::cerr << "ERROR: " << err.what() << "(" << err_code(err.err()) << ")" << std::endl;
   }
+  auto t1 = high_resolution_clock::now();
+  microseconds total_ms = std::chrono::duration_cast<microseconds>(t1 - t0);
+  cout<<" Event: "<<e.GetId()<<" - the trackleting ran in "<<total_ms.count()<<" microseconds"<<endl;
 
-  std::ofstream myfile("/tmp/parallel.txt",ios::out);
+#ifdef CHECK_OUTPUT
+  std::ofstream myfile("/tmp/parallel_trackleter.txt",ios::out);
   for (int iL = 0; iL < 6; ++iL) {
     for (size_t iT = 0; iT < vtId0[iL].size(); ++iT)
       myfile << vtId0[iL][iT] << "\t" << vtId1[iL][iT] << "\n";
     myfile << endl;
   }
   myfile.close();
+#endif
 
-  /*try {
+  try {
     for (int iL = 0; iL < 5; ++iL) {
       CellFinder(
           cl::EnqueueArgs(queue,cl::NDRange(kNphi * kGroupSize), cl::NDRange(kGroupSize)),
@@ -266,25 +271,35 @@ int main(int argc, char** argv) {
           d_tdzdr[iL + 1],
           d_LUT[iL],
           d_LUT[iL + 1],
-          d_LUT[iL + 2],
           d_cid1[iL],
-          d_cid0[iL + 1]);
+          d_cid0[iL + 1],
+          d_CoarseLUT[iL],
+          d_CoarseLUT[iL + 1]);
       cl::copy(queue,d_cid0[iL + 1],begin(vcid0[iL + 1]),end(vcid0[iL + 1]));
       cl::copy(queue,d_cid1[iL],begin(vcid1[iL]),end(vcid1[iL]));
     }
   } catch (cl::Error err) {
     std::cout << "Exception during the CellFinder execution.\n";
     std::cerr << "ERROR: " << err.what() << "(" << err_code(err.err()) << ")" << std::endl;
-  }*/
+  }
   queue.finish();
 
-  auto t1 = high_resolution_clock::now();
-  microseconds total_ms = std::chrono::duration_cast<microseconds>(t1 - t0);
+  t1 = high_resolution_clock::now();
+  total_ms = std::chrono::duration_cast<microseconds>(t1 - t0);
   cout<<" Event: "<<e.GetId()<<" - the vertexing ran in "<<total_ms.count()<<" microseconds"<<endl;
 
+#ifdef CHECK_OUTPUT
+  std::ofstream myfileCF("/tmp/parallel_cellfinder.txt",ios::out);
+  for (int iL = 0; iL < 6; ++iL) {
+    for (size_t iT = 0; iT < vcid0[iL].size(); ++iT)
+      myfileCF << vcid0[iL][iT] << "\t" << vcid1[iL][iT] << "\n";
+    myfileCF << endl;
+  }
+  myfileCF.close();
+#endif
   /// Vertex Finding and comparison
   float vtx[3];
-  for (int iL = 0; iL < 6; ++iL) {
+  /*for (int iL = 0; iL < 6; ++iL) {
     int good = 0,fake=0;
     for (size_t iT = 0; iT < vtId0[iL].size(); ++iT) {
       if (vMcl[iL][vtId0[iL][iT]] == vMcl[iL + 1][vtId1[iL][iT]]) good++;
@@ -305,7 +320,7 @@ int main(int argc, char** argv) {
   }
   cout << "\n\tValidated tracklets: fakes " << fake;
   cout << ", goods: " << good <<endl;
-  // computeVertex(vtx);
+  // computeVertex(vtx);*/
   return 0;
 }
 
