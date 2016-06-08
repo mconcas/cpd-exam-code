@@ -1,9 +1,10 @@
 #include "VertexCandidate.h"
+#include <cmath>
 
-VertexCandidate::VertexCandidate() :fA(), 
-	fB(), 
-	fV(),
-	fSize(0) 
+VertexCandidate::VertexCandidate() :fA(),
+  fB(),
+  fV(),
+  fSize(0)
 {
   for(int i=0; i<9; ++i)
     fW[i] = 0.;
@@ -96,4 +97,12 @@ void VertexCandidate::Add(VertexCandidate &cand) {
   for (int i = 0; i < 3; ++i) {
     fB[i] += b[i];
   }
+}
+
+float IntersectCylinder(Line &l, float r) {
+  const float a = l.c[0] * l.c[0] + l.c[1] * l.c[1];
+  const float b = l.c[0] * l.x[0] + l.c[1] * l.x[1];
+  const float c = l.x[0] * l.x[0] + l.x[1] * l.x[1] - r * r;
+  const float t = (sqrt(b * b - a * c) - b) / a;
+  return l.x[2] + l.c[2] * t;
 }

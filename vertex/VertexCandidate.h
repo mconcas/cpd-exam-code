@@ -7,6 +7,7 @@ struct Line {
   double c[3];                     /// Direction of the line
 };
 
+float IntersectCylinder(Line &l, float r);
 
 class VertexCandidate {
   public:
