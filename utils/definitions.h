@@ -17,6 +17,6 @@
 #define kGroupSize 1024
 #define kNgroups (kNz * kNphi / kGroupSize)
 
-#define CHECK_OUTPUT
+//#define CHECK_OUTPUT
 
 #endif

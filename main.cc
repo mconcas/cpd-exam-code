@@ -297,30 +297,6 @@ int main(int argc, char** argv) {
   }
   myfileCF.close();
 #endif
-  /// Vertex Finding and comparison
-  float vtx[3];
-  /*for (int iL = 0; iL < 6; ++iL) {
-    int good = 0,fake=0;
-    for (size_t iT = 0; iT < vtId0[iL].size(); ++iT) {
-      if (vMcl[iL][vtId0[iL][iT]] == vMcl[iL + 1][vtId1[iL][iT]]) good++;
-      else fake++;
-    }
-    cout << "\n\tLayer " << iL << ": fakes " << double(fake) / vtId0[iL].size();
-    cout << ", goods: " << double(good) / vtId0[iL].size() << endl;
-  }
-
-  int good = 0;
-  int fake = 0;
-  for (size_t iT = 0; iT < vtId0[1].size(); ++iT) {
-    if (vcid0[1][iT] >= 0 && vcid1[1][iT] >= 0) {
-      int idx = vcid0[1][iT];
-      if (vMcl[0][vtId0[0][idx]] == vMcl[1][vtId1[0][idx]]) good++;
-      else fake++;
-    }
-  }
-  cout << "\n\tValidated tracklets: fakes " << fake;
-  cout << ", goods: " << good <<endl;
-  // computeVertex(vtx);*/
   return 0;
 }
 
