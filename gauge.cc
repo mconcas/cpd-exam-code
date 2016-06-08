@@ -50,7 +50,6 @@ int main(int argc, char** argv) {
     vector<float> vZ[7];
     vector<float> vPhi[7];
 
-    int tot_tracklets = 0;
     cout<<"Clusters Data: "<<endl;
     /// Loop over layers
     for (int iL = 0; iL < 7; ++iL ) {
@@ -82,7 +81,7 @@ int main(int argc, char** argv) {
 
       /// Fill the lookup-table
       for (int iC = 0; iC < size; ++iC) {
-        while (index(phi[iC],z[iC],iL) > tLUT.size())
+        while (index(phi[iC],z[iC],iL) > int(tLUT.size()))
           tLUT.push_back(iC);
       }
       while (tLUT.size() <= kNz * kNphi ) tLUT.push_back(size);  // Fix LUT size

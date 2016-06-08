@@ -10,6 +10,7 @@
 #include "definitions.h"
 #include "util.hpp"
 #include "cl.hpp"
+#include <fstream>
 
 using std::vector;
 using std::begin;
@@ -17,6 +18,7 @@ using std::end;
 using std::cout;
 using std::endl;
 using std::cerr;
+using std::ios;
 
 constexpr float kDphi = kTwoPi / kNphi;
 constexpr float kInvDphi = kNphi / kTwoPi;
@@ -32,7 +34,7 @@ int main(int argc, char** argv) {
     exit(EXIT_FAILURE);
   }
   cl_device_type DEVICE = CL_DEV_CPU;
-  
+
   if( argv[2] != NULL ) {
     if ( atoi(argv[2]) == 1 ) {
       DEVICE = CL_DEV_CPU;
@@ -97,7 +99,6 @@ int main(int argc, char** argv) {
   cl::Buffer d_y[7];
   cl::Buffer d_z[7];
   cl::Buffer d_LUT[7];
-  cl::Buffer d_radii[7];
   cl::Buffer d_tid0[6];
   cl::Buffer d_tid1[6];
   cl::Buffer d_tdzdr[6];
@@ -114,9 +115,6 @@ int main(int argc, char** argv) {
   vector<float> vZ[7];
   vector<float> vPhi[7];
   vector<int>   vMcl[7];
-
-
-  int tot_tracklets = 0;
 
   /// Loop over layers
   for (int iL = 0; iL < 7; ++iL ) {
@@ -150,12 +148,11 @@ int main(int argc, char** argv) {
 
     /// Fill the lookup-table
     for (int iC = 0; iC < size; ++iC) {
-
-      while (index(phi[iC],z[iC],iL) > tLUT.size()) {
+      while (index(phi[iC],z[iC],iL) > int(tLUT.size())) {
         tLUT.push_back(iC);
       }
     }
-    while (tLUT.size() <= kNz * kNphi ) tLUT.push_back(size);  // Fix LUT size
+    while (int(tLUT.size()) <= kNz * kNphi) tLUT.push_back(size);  // Fix LUT size
 
     d_x[iL] = cl::Buffer(context, begin(x), end(x), true);
     d_y[iL] = cl::Buffer(context, begin(y), end(y), true);
@@ -221,6 +218,14 @@ int main(int argc, char** argv) {
     std::cerr << "ERROR: " << err.what() << "(" << err_code(err.err()) << ")" << std::endl;
   }
 
+  std::ofstream myfile("/tmp/parallel.txt",ios::out);
+  for (int iL = 0; iL < 6; ++iL) {
+    for (size_t iT = 0; iT < vtId0[iL].size(); ++iT)
+      myfile << vtId0[iL][iT] << "\t" << vtId1[iL][iT] << "\n";
+    myfile << endl;
+  }
+  myfile.close();
+
   try {
     for (int iL = 0; iL < 5; ++iL) {
       CellFinder(
@@ -263,7 +268,7 @@ int main(int argc, char** argv) {
 
   int good = 0;
   int fake = 0;
-  for (int iT = 0; iT < vtId0[1].size(); ++iT) {
+  for (size_t iT = 0; iT < vtId0[1].size(); ++iT) {
     if (vcid0[1][iT] >= 0 && vcid1[1][iT] >= 0) {
       int idx = vcid0[1][iT];
       if (vMcl[0][vtId0[0][idx]] == vMcl[1][vtId1[0][idx]]) good++;
@@ -283,14 +288,10 @@ void computeVertex(int* id0, int* id1, int lenIds,  // Trusted cluster id on lay
     float* final_vertex                 // Vertex array
     )
 {
-  int threads = 1;
 
   VertexCandidate vtxcand;
 #pragma omp parallel
   {
-    threads = omp_get_num_threads();
-    int tid = omp_get_thread_num();
-    int n = 0;
     VertexCandidate candidate;
 #pragma omp for
     for ( int id = 0; id < lenIds; ++id ) {
