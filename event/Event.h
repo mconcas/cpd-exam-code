@@ -33,6 +33,7 @@ class Event {
     int GetId() const { return fId; }
     void SetVertex(float x, float y, float z);
     void PrintVertex();
+    array<float,3> GetVertex() const { return fMcvtx; }
     void PushHitToLayer(int id, float x, float y ,float z, float ex, float ey, float ez,
       float alpha, int mcl0, int mcl1);
     Layer& GetLayer(int layer) { return fLayers[layer]; }
