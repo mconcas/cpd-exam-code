@@ -9,7 +9,7 @@
 #include "definitions.h"
 #include <omp.h>
 #include <fstream>
-
+#define CHECK_OUTPUT
 using std::vector;
 using std::begin;
 using std::end;
@@ -26,36 +26,11 @@ constexpr float kInvDz[7] = {
   0.5 * kNz / 42.140f,0.5 * kNz / 73.745f,0.5 * kNz / 73.745f};
 constexpr float kRadii[7] = {2.34,3.15,3.93,19.6,24.55,34.39,39.34};
 
-template<typename T> T clamp(T n, T lower, T upper) {
-  return std::max(lower, std::min(n, upper));
-}
-
-int get_nclusters_phi(int* lut, int iPhi) {
-  iPhi &= (kNphi - 1);
-  return lut[(iPhi + 1) * kNz] - lut[iPhi * kNz];
-};
-
-int get_nclusters_phi_z(int* lut, int iPhi, int iZ) {
-  iPhi &= (kNphi - 1);
-  return lut[iPhi * kNz + iZ + 1] - lut[iPhi * kNz + iZ];
-};
-
-int n_tracklets_phi(int* lut0, int* lut1, int nphi) {
-  int n = 0;
-  for (int i = 0; i < nphi; ++i)
-    n += get_nclusters_phi(lut0,i) * (get_nclusters_phi(lut1,i + 1) + get_nclusters_phi(lut1,i) + get_nclusters_phi(lut1,i - 1));
-  return n;
-};
-
-int n_tracklet_phi_z(int* lut0, int* lut1, int nphi0, int nz0) {
-  int n = n_tracklets_phi(lut0,lut1,nphi0);
-
-  int mult = (get_nclusters_phi(lut1,nphi0 + 1) + get_nclusters_phi(lut1,nphi0) + get_nclusters_phi(lut1,nphi0 - 1));
-  for (int iZ0 = 0; iZ0 < nz0; ++iZ0) {
-    n += get_nclusters_phi_z(lut0,nphi0,iZ0) * mult;
-  }
-  return n;
-};
+void ComputeVertex(int lenIds,  // Trusted cluster id on layer 0,1 
+    float* x0, float* y0, float* z0,    // Clusters layer0
+    float* x1, float* y1, float* z1,    // Clusters layer1
+    float* final_vertex                 // Vertex array
+    );
 
 int GetNumberOfClustersPhi( int*  lut, int iPhi) {
   iPhi &= (kNphi - 1);
@@ -280,8 +255,8 @@ int main(int argc, char** argv) {
           for (int iT1 = t1; iT1 < t1_next; ++iT1) {
             const bool flag = (id0_1[iT01] == id1_0[iT1]) &&
               (fabs(dzdr0[iT01] - dzdr1[iT1]) + fabs(tphi0[iT01] - tphi1[iT1]) < kDiagonalTol);
-           // (fabs(dzdr0[iT01] - dzdr1[iT1]) < kDzDrTol) &&
-           // (fabs(tphi0[iT01] - tphi1[iT1]) < kDphiTol);
+            // (fabs(dzdr0[iT01] - dzdr1[iT1]) < kDzDrTol) &&
+            // (fabs(tphi0[iT01] - tphi1[iT1]) < kDphiTol);
             if (flag) {
               neigh0_1[iT01] = iT1;
               neigh1_0[iT1]  = iT01;
@@ -307,80 +282,60 @@ int main(int argc, char** argv) {
     cout << ", goods: " << double(good) / vtId0[iL].size() << endl;
   }
 
+  vector<float> trusted_x[2];
+  vector<float> trusted_y[2];
+  vector<float> trusted_z[2];
   int good = 0;
-  int fake = 0;
-  vector<float> dzdr[2];
-  vector<float> dphi[2];
   for (size_t iT = 0; iT < vtId0[0].size(); ++iT) {
     int assoc_id = vcid1[0][iT];
-    int mcLabel = GoodTracklet(vMcl[0].data(), vMcl[1].data(), vtId0[0].data(), vtId1[0].data(), iT);
     if (assoc_id > -1) {
-      if (vcid0[1][assoc_id] > -1 && vcid1[1][assoc_id] > -1) {// && vcid0[1][assoc_id] == iT)
+      if (vcid0[1][assoc_id] > -1 && vcid1[1][assoc_id] > -1) {
         int assoc_id1 = vcid1[1][assoc_id];
-        if (vcid0[2][assoc_id1] > -1 && vcid1[2][assoc_id1] > -1) {// && vcid0[1][assoc_id] == iT
-          if (mcLabel > -1) {//&& mcLabel == GoodTracklet(vMcl[2].data(), vMcl[3].data(), vtId0[2].data(), vtId1[3].data(), assoc_id1))
-            dzdr[0].push_back(fabs(vtdzdr[0][iT] - vtdzdr[2][assoc_id1]));
-            dphi[0].push_back(fabs(vtphi[0][iT] - vtphi[2][assoc_id1]));
-            good++;
-          } else {
-            dzdr[1].push_back(fabs(vtdzdr[0][iT] - vtdzdr[2][assoc_id1]));
-            dphi[1].push_back(fabs(vtphi[0][iT] - vtphi[2][assoc_id1]));
-            fake++;
-          }
-        }
-      kDiagonalTol}
+        if (vcid0[2][assoc_id1] > -1 && vcid1[2][assoc_id1] > -1) {
+          if (GoodTracklet(vMcl[0].data(), vMcl[1].data(), vtId0[0].data(), vtId1[0].data(), iT) >= 0) good++;
+          trusted_x[0].push_back(vX[0][vtId0[0][iT]]);
+          trusted_y[0].push_back(vY[0][vtId0[0][iT]]);
+          trusted_z[0].push_back(vZ[0][vtId0[0][iT]]);
+          trusted_x[1].push_back(vX[1][vtId1[0][iT]]);
+          trusted_y[1].push_back(vY[1][vtId1[0][iT]]);
+          trusted_z[1].push_back(vZ[1][vtId1[0][iT]]);
+        } 
+      }
     }
   }
-  cout << "\n\tValidated tracklets: fakes " << fake;
-  cout << ", goods: " << good<< endl;
-
-  std::string name[2] = {"G","B"};
-  std::string namedeltadzdr = ("/tmp/deltadzdr");
-  std::string namedeltaphi = ("/tmp/deltaphi");
-  for (int i = 0; i < 2; ++i) {
-    std::ofstream dzdrf((namedeltadzdr + name[i]).data());
-    for (auto &v : dzdr[i]) dzdrf << v << "\n";
-    dzdrf.close();
-    std::ofstream dphif((namedeltaphi + name[i]).data());
-    for (auto &v : dphi[i]) dphif << v << "\n";
-    dphif.close();
-  }
-
+  cout << "Good: " << good << endl;
   /// Vertex Finding and comparison
+  auto mcV = e.GetVertex();
   float vtx[3];
-  // computeVertex(vtx);
+  ComputeVertex(trusted_x[0].size(),trusted_x[0].data(),trusted_y[0].data(),trusted_z[0].data(),
+      trusted_x[1].data(),trusted_y[1].data(),trusted_z[1].data(),vtx);
+  cout << vtx[0] - mcV[0] << "\t" << vtx[1] - mcV[1] << "\t" << vtx[2] - mcV[2] << "\t" << trusted_x[0].size() << endl;
   return 0;
 }
 
-void computeVertex(int* id0, int* id1, int lenIds,  // Trusted cluster id on layer 0,1
-    int* lut0, int* lut1,               // LUTs layer0, layer1
+void ComputeVertex(int lenIds,  // Trusted cluster id on layer 0,1
     float* x0, float* y0, float* z0,    // Clusters layer0
     float* x1, float* y1, float* z1,    // Clusters layer1
     float* final_vertex                 // Vertex array
     )
 {
 
-  VertexCandidate vtxcand;
-#pragma omp parallel
-  {
-    VertexCandidate candidate;
-#pragma omp for
-    for ( int id = 0; id < lenIds; ++id ) {
-      /// Reconstruct line from data
-      Line l;
-      l.x[0] = x0[lut0[id0[id]]];
-      l.x[1] = y0[lut0[id0[id]]];
-      l.x[2] = z0[lut0[id0[id]]];
-      l.c[0] = x1[lut1[id1[id]]] - x0[lut0[id0[id]]];
-      l.c[1] = y1[lut1[id1[id]]] - y0[lut0[id0[id]]];
-      l.c[2] = z1[lut1[id1[id]]] - z0[lut0[id0[id]]];
-      candidate.Add(l);
-    }
-#pragma omp critical
-    {
-      vtxcand.Add(candidate);
-    }
+  vector<Line> lines(lenIds);
+  for ( int id = 0; id < lenIds; ++id ) {
+    /// Reconstruct line from data
+    lines[id].x[0] = x0[id];
+    lines[id].x[1] = y0[id];
+    lines[id].x[2] = z0[id];
+    lines[id].c[0] = x1[id] - x0[id];
+    lines[id].c[1] = y1[id] - y0[id];
+    lines[id].c[2] = z1[id] - z0[id];
   }
+
+  //TODO: More elaborate strategy to reject fakes at the vertexing level.
+
+  VertexCandidate vtxcand;
+  for (auto& l : lines)
+    vtxcand.Add(l);
   vtxcand.ComputeClusterCentroid();
   vtxcand.GetVertex(final_vertex);
 }
