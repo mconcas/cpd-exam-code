@@ -28,7 +28,7 @@ constexpr float kInvDz[7] = {
   0.5 * kNz / 42.140f,0.5 * kNz / 73.745f,0.5 * kNz / 73.745f};
 constexpr float kRadii[7] = {2.34,3.15,3.93,19.6,24.55,34.39,39.34};
 
-int GetNumberOfClustersPhi( int*  lut, int iPhi) {
+int GetNumberOfClustersPhi(int*  lut, int iPhi) {
   iPhi &= (kNphi - 1);
   return lut[(iPhi + 1) * kNz] - lut[iPhi * kNz];
 };
@@ -58,7 +58,7 @@ int main(int argc, char** argv) {
   if( argv[2] != NULL ) {
     if ( atoi(argv[2]) == 1 ) {
       DEVICE = CL_DEV_CPU;
-    } else if ( atoi(argv[2]) == 2 ) 
+    } else if ( atoi(argv[2]) == 2 )
       DEVICE = CL_DEV_ACC;
   } else {
     cout<<"\n\tEmpty or invalid architecture specified, defaulting to CPU version. "<<endl;
@@ -107,7 +107,7 @@ int main(int argc, char** argv) {
   }
 
   // Enqueue the context
-  cl::CommandQueue queue(context);
+  std::array<cl::CommandQueue, 2> queue{cl::CommandQueue(context),cl::CommandQueue(context)};
 
   /// Create kernel function
   auto Trackleter = cl::make_kernel<cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,cl::Buffer,
@@ -209,7 +209,7 @@ int main(int argc, char** argv) {
   auto t0 = high_resolution_clock::now();
 
   try {
-    for (int iL = 0; iL < 6; iL++) {
+    for (int iL = 0; iL < 2; iL++) {
       d_tid0[iL]  = cl::Buffer(context, begin(vtId0[iL]),  end(vtId0[iL]),  false);
       d_tid1[iL]  = cl::Buffer(context, begin(vtId1[iL]),  end(vtId1[iL]),  false);
       d_tdzdr[iL] = cl::Buffer(context, begin(vtdzdr[iL]), end(vtdzdr[iL]), false);
@@ -217,7 +217,7 @@ int main(int argc, char** argv) {
       d_CoarseLUT[iL] = cl::Buffer(context, tLUT[iL].begin(), tLUT[iL].end(), true);
 
       Trackleter(
-          cl::EnqueueArgs(queue,cl::NDRange(kNphi * kGroupSize), cl::NDRange(kGroupSize)),
+          cl::EnqueueArgs(queue[iL%2],cl::NDRange(kNphi * kGroupSize), cl::NDRange(kGroupSize)),
           d_x[iL],
           d_y[iL],
           d_z[iL],
@@ -233,13 +233,13 @@ int main(int argc, char** argv) {
           d_tdzdr[iL],
           kRadii[iL+1]-kRadii[iL]);
 
-      queue.flush();
+      //queue[iL%2].flush();
 
       d_cid0[iL] = cl::Buffer(context, begin(vcid0[iL]), end(vcid0[iL]), false);
       d_cid1[iL] = cl::Buffer(context, begin(vcid1[iL]), end(vcid1[iL]), false);
       //TODO: use non-blocking I/O
-      cl::copy(queue,d_tid0[iL],begin(vtId0[iL]),end(vtId0[iL]));
-      cl::copy(queue,d_tid1[iL],begin(vtId1[iL]),end(vtId1[iL]));
+      cl::copy(queue[iL%2],d_tid0[iL],begin(vtId0[iL]),end(vtId0[iL]));
+      cl::copy(queue[iL%2],d_tid1[iL],begin(vtId1[iL]),end(vtId1[iL]));
     }
   } catch (cl::Error err) {
     std::cout << "Exception during the Trackleter execution.\n";
@@ -258,8 +258,9 @@ int main(int argc, char** argv) {
   }
   myfile.close();
 #endif
-
-  try {
+  queue[0].finish();
+  queue[1].finish();
+  /*try {
     for (int iL = 0; iL < 5; ++iL) {
       CellFinder(
           cl::EnqueueArgs(queue,cl::NDRange(kNphi * kGroupSize), cl::NDRange(kGroupSize)),
@@ -297,6 +298,7 @@ int main(int argc, char** argv) {
   }
   myfileCF.close();
 #endif
+*/
   return 0;
 }
 
